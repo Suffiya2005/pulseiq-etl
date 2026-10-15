@@ -1,16 +1,16 @@
-
+﻿
 import json
 import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_full_etl_pipeline_outputs():
     result = subprocess.run(
         [sys.executable, "-m", "src.pipeline"],
-        cwd=ROOT,
+        cwd=ROOT / "task1-etl",
         capture_output=True,
         text=True,
         timeout=180,
@@ -50,3 +50,5 @@ def test_full_etl_pipeline_outputs():
         summary["total_input"]
         == summary["total_output"] + summary["total_rejected"]
     )
+
+

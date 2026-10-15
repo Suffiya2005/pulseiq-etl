@@ -1,4 +1,4 @@
-"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
+﻿"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pandas as pd
 # 1. PROJECT PATHS AND CONFIGURATION
 # --------------------------------------------------
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 RAW = ROOT / os.getenv("RAW_DATA_DIR", "data/raw")
 CLEAN = ROOT / os.getenv("CLEAN_DATA_DIR", "data/clean")
@@ -759,3 +759,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

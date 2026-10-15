@@ -10,7 +10,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./rejected:/app/rejected
-      - ./sql:/app/sql
+      - ./task2-warehouse/sql:/app/sql
     command: python -m src.pipeline
     depends_on:
       postgres:
@@ -27,7 +27,7 @@ services:
       - "5433:5432"
     volumes:
       - warehouse_data:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d:ro
+      - ./task2-warehouse/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pulseiq -d pulseiq_warehouse"]
       interval: 5s

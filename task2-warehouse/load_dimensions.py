@@ -46,5 +46,14 @@ print(f"Roles processed: {len(roles)}")
 # Load leave types from the reference workbook
 import subprocess
 import sys
-subprocess.run([sys.executable, 'src/load_leave_types.py'], check=True)
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+leave_script = ROOT / "task1-etl" / "src" / "load_leave_types.py"
+
+subprocess.run(
+    [sys.executable, str(leave_script)],
+    cwd=ROOT,
+    check=True,
+)
 

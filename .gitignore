@@ -18,8 +18,13 @@ rejected/
 Thumbs.db
 
 # Generated exports and backup files
-dashboards/pulseiq_dashboard_export.zip
+task3-analytics/dashboards/pulseiq_dashboard_export.zip
 src/*backup*
 src/*before_fix*
 src/src/
 tests/*backup*
+# Local backup files
+task1-etl/src/*backup*
+task1-etl/src/*before_fix*
+task1-etl/src/src/
+task1-etl/tests/*backup*
