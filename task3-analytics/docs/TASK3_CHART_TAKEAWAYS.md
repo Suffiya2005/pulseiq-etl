@@ -2,77 +2,51 @@
 
 
 
-\*\*Data note:\*\* These takeaways must be confirmed against the actual Superset chart results and warehouse metrics before final submission.
-
-
-
 \## 1. Current Headcount
 
-\*\*Metric:\*\* Current employee headcount.
-
-
-
-\*\*Takeaway:\*\* The dashboard displays the current headcount KPI. Confirm the value against the warehouse before reporting it.
+The current employee dimension contains 745 distinct current employees, excluding the UNKNOWN placeholder. The latest monthly headcount snapshot for September 2026 is 441. These metrics use different definitions and must not be treated as interchangeable.
 
 
 
 \## 2. Monthly Headcount Trend
 
-\*\*Metric:\*\* Employee headcount by month.
-
-
-
-\*\*Takeaway:\*\* The displayed series shows how headcount changes across the available reporting months. Confirm the trend and reporting period from the chart.
+Headcount increased from 409 in May 2026 to 441 in September 2026, a net increase of 32 employees.
 
 
 
 \## 3. Headcount by Department
 
-\*\*Metric:\*\* Headcount grouped by department.
+In September 2026, Engineering had the highest headcount at 167, followed by Customer Support at 59 and Data \& AI at 52. The department totals reconcile to 441.
 
 
 
-\*\*Takeaway:\*\* The chart compares employee headcount across departments. Identify the largest department from the verified chart values.
+\## 4. Role Mix
+
+The current employee query shows QA Engineer as the most common role, with 50 employees, followed by Software Engineer (43) and Associate Software Engineer (40).
 
 
 
-\## 4. Tenure Bands
+\## 5. Tenure Bands
 
-\*\*Metric:\*\* Employees grouped by years of service.
-
-
-
-\*\*Takeaway:\*\* The chart compares employee distribution across tenure bands. Confirm the largest band and its count from the actual results.
-
-
-
-\## 5. Role Mix
-
-\*\*Metric:\*\* Employees grouped by role.
-
-
-
-\*\*Takeaway:\*\* The chart shows how employees are distributed across roles. Confirm the leading role from the verified results.
+A provisional calculation using `valid\_from` shows 248 records in the 1–3 years band, 209 under 1 year, 156 in 3–5 years, and 132 in 5+ years. This is not confirmed employee tenure because `valid\_from` may represent the start of a history record rather than the original joining date.
 
 
 
 \## 6. Monthly Joiners vs Leavers
 
-\*\*Metric:\*\* Monthly hires and exits.
+In September 2026, the warehouse recorded 17 hires and 3 exits.
 
 
 
-\*\*Takeaway:\*\* The chart compares employee joins and exits over time. Confirm the reporting period and the observed pattern from the actual results.
+\## Validation Notes
 
+\- September monthly department totals reconcile to 441.
 
+\- Current employee dimension count is 745; this differs from the September monthly snapshot.
 
-\## Validation
+\- Confirm the original joining-date field before publishing tenure as an official metric.
 
-\- \[ ] Takeaway values match the PostgreSQL warehouse.
-
-\- \[ ] Reporting periods are clearly identified.
-
-\- \[ ] No values or trends are assumed without evidence.
+\- Confirm the Superset charts use the same metric definitions as the warehouse.
 
 
 
