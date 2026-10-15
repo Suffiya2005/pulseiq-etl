@@ -1,0 +1,86 @@
+slice_name: Current Headcount
+description: null
+certified_by: null
+certification_details: null
+viz_type: big_number_total
+params:
+  datasource: 1__table
+  viz_type: big_number_total
+  slice_id: 9
+  matrixify_enable: false
+  matrixify_mode_columns: disabled
+  matrixify_dimension_selection_mode_columns: members
+  matrixify_dimension_columns:
+    dimension: ''
+    values: []
+  matrixify_topn_value_columns: 10
+  matrixify_all_sort_by_columns: a_to_z
+  matrixify_topn_order_columns: true
+  matrixify_show_column_headers: true
+  matrixify_fit_columns_dynamically: true
+  matrixify_mode_rows: disabled
+  matrixify_dimension_selection_mode_rows: members
+  matrixify_dimension_rows:
+    dimension: ''
+    values: []
+  matrixify_topn_value_rows: 10
+  matrixify_all_sort_by_rows: a_to_z
+  matrixify_topn_order_rows: true
+  matrixify_show_row_labels: true
+  matrixify_row_height: 300
+  matrixify_charts_per_row: 4
+  matrixify_cell_title_template: ''
+  metric:
+    aggregate: SUM
+    column:
+      advanced_data_type: null
+      certification_details: null
+      certified_by: null
+      column_name: headcount_end
+      description: null
+      expression: null
+      filterable: true
+      groupby: true
+      id: 10
+      is_certified: false
+      is_dttm: false
+      python_date_format: null
+      type: INTEGER
+      type_generic: 0
+      uuid: 84454929-4b44-4733-b8dd-7e72ce4b9558
+      verbose_name: null
+      warning_markdown: null
+    datasourceWarning: false
+    expressionType: SIMPLE
+    hasCustomLabel: false
+    label: SUM(headcount_end)
+    optionName: metric_jy6z2oifgm_ak57sp6mi65
+    sqlExpression: null
+  adhoc_filters:
+  - expressionType: SIMPLE
+    subject: month_start_date
+    operator: TEMPORAL_RANGE
+    comparator: '2026-09-01T00:00:00 : 2026-10-01T00:00:00'
+    clause: WHERE
+    sqlExpression: null
+    isExtra: false
+    isNew: false
+    datasourceWarning: false
+    filterOptionName: filter_gfv2ikanbgl_ho7m5z62hs
+  header_font_size: 0.4
+  subtitle_font_size: 0.15
+  show_metric_name: false
+  metric_name_font_size: 0.15
+  y_axis_format: SMART_NUMBER
+  time_format: smart_date
+  force_timestamp_formatting: false
+  extra_form_data: {}
+  dashboards:
+  - 5
+query_context: '{"datasource":{"id":1,"type":"table"},"force":false,"queries":[{"filters":[{"col":"month_start_date","op":"TEMPORAL_RANGE","val":"2026-09-01T00:00:00
+  : 2026-10-01T00:00:00"}],"extras":{"having":"","where":""},"applied_time_extras":{},"columns":[],"metrics":[{"aggregate":"SUM","column":{"advanced_data_type":null,"certification_details":null,"certified_by":null,"column_name":"headcount_end","description":null,"expression":null,"filterable":true,"groupby":true,"id":10,"is_certified":false,"is_dttm":false,"python_date_format":null,"type":"INTEGER","type_generic":0,"uuid":"84454929-4b44-4733-b8dd-7e72ce4b9558","verbose_name":null,"warning_markdown":null},"datasourceWarning":false,"expressionType":"SIMPLE","hasCustomLabel":false,"label":"SUM(headcount_end)","optionName":"metric_jy6z2oifgm_ak57sp6mi65","sqlExpression":null}],"annotation_layers":[],"series_limit":0,"group_others_when_limit_reached":false,"order_desc":true,"url_params":{},"custom_params":{},"custom_form_data":{}}],"form_data":{"datasource":"1__table","viz_type":"big_number_total","slice_id":9,"matrixify_enable":false,"matrixify_mode_columns":"disabled","matrixify_dimension_selection_mode_columns":"members","matrixify_dimension_columns":{"dimension":"","values":[]},"matrixify_topn_value_columns":10,"matrixify_all_sort_by_columns":"a_to_z","matrixify_topn_order_columns":true,"matrixify_show_column_headers":true,"matrixify_fit_columns_dynamically":true,"matrixify_mode_rows":"disabled","matrixify_dimension_selection_mode_rows":"members","matrixify_dimension_rows":{"dimension":"","values":[]},"matrixify_topn_value_rows":10,"matrixify_all_sort_by_rows":"a_to_z","matrixify_topn_order_rows":true,"matrixify_show_row_labels":true,"matrixify_row_height":300,"matrixify_charts_per_row":4,"matrixify_cell_title_template":"","metric":{"aggregate":"SUM","column":{"advanced_data_type":null,"certification_details":null,"certified_by":null,"column_name":"headcount_end","description":null,"expression":null,"filterable":true,"groupby":true,"id":10,"is_certified":false,"is_dttm":false,"python_date_format":null,"type":"INTEGER","type_generic":0,"uuid":"84454929-4b44-4733-b8dd-7e72ce4b9558","verbose_name":null,"warning_markdown":null},"datasourceWarning":false,"expressionType":"SIMPLE","hasCustomLabel":false,"label":"SUM(headcount_end)","optionName":"metric_jy6z2oifgm_ak57sp6mi65","sqlExpression":null},"adhoc_filters":[{"expressionType":"SIMPLE","subject":"month_start_date","operator":"TEMPORAL_RANGE","comparator":"2026-09-01T00:00:00
+  : 2026-10-01T00:00:00","clause":"WHERE","sqlExpression":null,"isExtra":false,"isNew":false,"datasourceWarning":false,"filterOptionName":"filter_gfv2ikanbgl_ho7m5z62hs"}],"header_font_size":0.4,"subtitle_font_size":0.15,"show_metric_name":false,"metric_name_font_size":0.15,"y_axis_format":"SMART_NUMBER","time_format":"smart_date","force_timestamp_formatting":false,"extra_form_data":{},"dashboards":[5],"force":false,"result_format":"json","result_type":"full"},"result_format":"json","result_type":"full"}'
+cache_timeout: null
+uuid: a90fe6ff-0b38-4b5e-9114-601666fe583f
+version: 1.0.0
+dataset_uuid: ade628dc-dbf2-4ab2-94dc-cadd45a83e61

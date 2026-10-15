@@ -1,0 +1,281 @@
+
+import json
+import os
+from pathlib import Path
+
+import pandas as pd
+import psycopg
+import streamlit as st
+from dotenv import load_dotenv
+
+ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / ".env.example")
+
+st.set_page_config(
+    page_title="PulseIQ Analytics",
+    page_icon="📊",
+    layout="wide",
+)
+
+st.title("PulseIQ Analytics Dashboard")
+st.caption("Task 1 — ETL Pipeline | Task 2 — Analytics Warehouse")
+
+# Sidebar navigation
+page = st.sidebar.radio(
+    "Select Dashboard",
+    ["Overview", "Task 1 - ETL", "Task 2 - Warehouse"],
+)
+
+CLEAN_DIR = ROOT / os.getenv("CLEAN_DATA_DIR", "data/clean")
+REJECTED_DIR = ROOT / os.getenv("REJECTED_DIR", "rejected")
+SUMMARY_PATH = ROOT / os.getenv("LOG_DIR", "logs") / "run_summary.json"
+
+
+def get_connection():
+    return psycopg.connect(
+        host=os.getenv("WAREHOUSE_HOST", "localhost"),
+        port=int(os.getenv("WAREHOUSE_PORT", "5433")),
+        dbname=os.getenv("WAREHOUSE_DB", "pulseiq_warehouse"),
+        user=os.getenv("WAREHOUSE_USER", "pulseiq"),
+        password=os.getenv("WAREHOUSE_PASSWORD", ""),
+        connect_timeout=5,
+    )
+
+
+def warehouse_query(query):
+    with get_connection() as conn:
+        return pd.read_sql_query(query, conn)
+
+
+if page == "Overview":
+    st.subheader("Project Overview")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("### Task 1 — ETL Pipeline")
+        st.write(
+            "Load raw files, clean and validate data, "
+            "export CSV/Parquet files, and track rejected records."
+        )
+
+        if CLEAN_DIR.exists():
+            clean_files = list(CLEAN_DIR.glob("*.csv"))
+            st.metric("Clean CSV datasets", len(clean_files))
+        else:
+            st.metric("Clean CSV datasets", 0)
+
+    with col2:
+        st.markdown("### Task 2 — Analytics Warehouse")
+        st.write(
+            "Explore PostgreSQL dimensions, fact tables, "
+            "payroll, attendance, leave, and headcount metrics."
+        )
+
+        try:
+            result = warehouse_query(
+                "SELECT COUNT(*) AS total FROM warehouse.fact_payroll"
+            )
+            st.metric("Payroll records", int(result.iloc[0]["total"]))
+            st.success("PostgreSQL connection successful")
+        except Exception as exc:
+            st.warning(f"Warehouse unavailable: {exc}")
+
+    if SUMMARY_PATH.exists():
+        st.subheader("Latest ETL Run")
+        try:
+            summary = json.loads(SUMMARY_PATH.read_text(encoding="utf-8"))
+            st.json(summary)
+        except (json.JSONDecodeError, OSError) as exc:
+            st.warning(f"Could not read ETL summary: {exc}")
+
+
+elif page == "Task 1 - ETL":
+    st.subheader("ETL Pipeline Dashboard")
+
+    if SUMMARY_PATH.exists():
+        try:
+            summary = json.loads(SUMMARY_PATH.read_text(encoding="utf-8"))
+            st.markdown("### Latest ETL Run")
+            st.json(summary)
+        except (json.JSONDecodeError, OSError) as exc:
+            st.error(f"Could not read ETL summary: {exc}")
+    else:
+        st.info("Run the ETL pipeline first to generate the summary.")
+
+    st.markdown("### Clean Data Preview")
+
+    if CLEAN_DIR.exists():
+        csv_files = sorted(CLEAN_DIR.glob("*.csv"))
+
+        if csv_files:
+            selected = st.selectbox(
+                "Select clean dataset",
+                csv_files,
+                format_func=lambda path: path.name,
+            )
+            try:
+                df = pd.read_csv(selected)
+                col1, col2 = st.columns(2)
+                col1.metric("Rows", len(df))
+                col2.metric("Columns", len(df.columns))
+                st.dataframe(df.head(100), use_container_width=True)
+                st.download_button(
+                    "Download selected CSV",
+                    data=selected.read_bytes(),
+                    file_name=selected.name,
+                    mime="text/csv",
+                )
+            except Exception as exc:
+                st.error(f"Could not read dataset: {exc}")
+        else:
+            st.info("No cleaned CSV files found.")
+    else:
+        st.info("Clean data folder has not been created yet.")
+
+    st.markdown("### Rejected Data")
+
+    if REJECTED_DIR.exists():
+        reject_files = sorted(REJECTED_DIR.glob("*.csv"))
+
+        if reject_files:
+            selected_reject = st.selectbox(
+                "Select rejected file",
+                reject_files,
+                format_func=lambda path: path.name,
+            )
+            try:
+                rejected_df = pd.read_csv(selected_reject)
+                st.metric("Rejected rows", len(rejected_df))
+                st.dataframe(
+                    rejected_df.head(100),
+                    use_container_width=True,
+                )
+            except Exception as exc:
+                st.error(f"Could not read rejected file: {exc}")
+        else:
+            st.info("No rejected CSV files found.")
+    else:
+        st.info("Rejected data folder has not been created yet.")
+
+
+elif page == "Task 2 - Warehouse":
+    st.subheader("PostgreSQL Analytics Warehouse")
+
+    table_options = [
+        "dim_date",
+        "dim_department",
+        "dim_role",
+        "dim_employee",
+        "dim_leave_type",
+        "fact_payroll",
+        "fact_attendance_monthly",
+        "fact_leave",
+        "fact_headcount_monthly",
+    ]
+
+    try:
+        # Table counts
+        count_frames = []
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for table in table_options:
+                    cur.execute(
+                        f"SELECT COUNT(*) FROM warehouse.{table}"
+                    )
+                    count_frames.append(
+                        {"Table": table, "Rows": cur.fetchone()[0]}
+                    )
+
+        counts_df = pd.DataFrame(count_frames)
+
+        st.markdown("### Warehouse Table Counts")
+        st.dataframe(counts_df, use_container_width=True, hide_index=True)
+
+        # Payroll KPIs
+        payroll = warehouse_query(
+            """
+            SELECT COUNT(*) AS payroll_rows,
+                   COUNT(DISTINCT employee_id) AS employees,
+                   COALESCE(SUM(gross_pay), 0) AS gross_pay,
+                   COALESCE(SUM(net_pay), 0) AS net_pay
+            FROM warehouse.fact_payroll
+            """
+        )
+
+        st.markdown("### Payroll KPIs")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Payroll Records", f"{int(payroll.iloc[0]['payroll_rows']):,}")
+        c2.metric("Employees", f"{int(payroll.iloc[0]['employees']):,}")
+        c3.metric("Gross Pay", f"₹{float(payroll.iloc[0]['gross_pay']):,.2f}")
+        c4.metric("Net Pay", f"₹{float(payroll.iloc[0]['net_pay']):,.2f}")
+
+        # Attendance KPI
+        attendance = warehouse_query(
+            """
+            SELECT COUNT(*) AS records,
+                   ROUND(AVG(attendance_rate)::numeric, 4) AS avg_rate
+            FROM warehouse.fact_attendance_monthly
+            """
+        )
+
+        st.markdown("### Attendance")
+        c1, c2 = st.columns(2)
+        c1.metric("Attendance Records", f"{int(attendance.iloc[0]['records']):,}")
+        avg_rate = attendance.iloc[0]["avg_rate"]
+        c2.metric(
+            "Average Attendance Rate",
+            "N/A" if pd.isna(avg_rate) else f"{float(avg_rate) * 100:.2f}%",
+        )
+
+        # Leave KPI
+        leave = warehouse_query(
+            """
+            SELECT COUNT(*) AS records,
+                   COALESCE(SUM(days), 0) AS leave_days
+            FROM warehouse.fact_leave
+            """
+        )
+
+        st.markdown("### Leave")
+        c1, c2 = st.columns(2)
+        c1.metric("Leave Requests", f"{int(leave.iloc[0]['records']):,}")
+        c2.metric("Total Leave Days", f"{float(leave.iloc[0]['leave_days']):,.2f}")
+
+        # Headcount KPI
+        headcount = warehouse_query(
+            """
+            SELECT COUNT(*) AS records,
+                   COALESCE(SUM(headcount_end), 0) AS headcount_end
+            FROM warehouse.fact_headcount_monthly
+            """
+        )
+
+        st.markdown("### Headcount")
+        c1, c2 = st.columns(2)
+        c1.metric("Monthly Department Records", f"{int(headcount.iloc[0]['records']):,}")
+        c2.metric("Sum of Monthly Ending Headcount", f"{int(headcount.iloc[0]['headcount_end']):,}")
+
+        # Data preview
+        st.markdown("### Explore Warehouse Table")
+        selected_table = st.selectbox("Select table", table_options)
+        preview = warehouse_query(
+            f"SELECT * FROM warehouse.{selected_table} LIMIT 100"
+        )
+        st.dataframe(preview, use_container_width=True)
+
+        st.download_button(
+            "Download table preview as CSV",
+            data=preview.to_csv(index=False).encode("utf-8"),
+            file_name=f"{selected_table}_preview.csv",
+            mime="text/csv",
+        )
+
+    except Exception as exc:
+        st.error(f"Warehouse query failed: {exc}")
+        st.info(
+            "Check that Docker PostgreSQL is running and that "
+            "the WAREHOUSE_* settings are correct."
+        )
+

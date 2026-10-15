@@ -1,0 +1,6 @@
+metric_name,description,formula,source_file,unit
+Headcount,Number of active employees,Count distinct employee_id where leaving_date is blank,employees.csv,employees
+Average Salary,Average recorded salary,Mean of salary column,salary.csv,currency
+Attendance Rate,Percentage of present attendance records,Present records divided by valid attendance records multiplied by 100,attendance.csv,percent
+Leave Days,Total recorded leave days,Sum of leave_days column,leave.csv,days
+Total Net Payroll,Total net payroll paid,Sum of net_pay column,payroll.csv,currency

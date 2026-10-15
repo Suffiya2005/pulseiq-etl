@@ -1,0 +1,63 @@
+
+services:
+  etl:
+    build: .
+    container_name: pulseiq-etl
+    working_dir: /app
+    env_file:
+      - .env.example
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./rejected:/app/rejected
+      - ./sql:/app/sql
+    command: python -m src.pipeline
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16
+    container_name: pulseiq-warehouse
+    environment:
+      POSTGRES_DB: pulseiq_warehouse
+      POSTGRES_USER: pulseiq
+      POSTGRES_PASSWORD: ${WAREHOUSE_PASSWORD:-pulseiq_dev_password}
+    ports:
+      - "5433:5432"
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulseiq -d pulseiq_warehouse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    container_name: pulseiq-superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "pulseiq_local_dev_secret_key_change_me"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      /bin/sh -c "
+      superset db upgrade &&
+      superset fab create-admin
+      --username admin
+      --firstname PulseIQ
+      --lastname Admin
+      --email admin@pulseiq.local
+      --password admin123 &&
+      superset init &&
+      /usr/bin/run-server.sh
+      "
+
+volumes:
+  warehouse_data:

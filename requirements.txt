@@ -1,0 +1,8 @@
+pandas
+pandera
+pyarrow
+python-dotenv
+pytest
+streamlit
+openpyxl
+psycopg[binary]

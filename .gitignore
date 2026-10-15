@@ -1,0 +1,25 @@
+﻿.env
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+data/
+raw_backup/
+src_backup/
+tests_backup_hold/
+temp_repeatability/
+logs/
+rejected/
+
+*.log
+.DS_Store
+Thumbs.db
+
+# Generated exports and backup files
+dashboards/pulseiq_dashboard_export.zip
+src/*backup*
+src/*before_fix*
+src/src/
+tests/*backup*

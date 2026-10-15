@@ -1,0 +1,6 @@
+﻿metric_id,metric_name,description,formula,source_dataset
+M001,Headcount,Count of unique active employees,Count of active employees,employees
+M002,Gross Payroll,Total gross payroll amount,Sum of gross_pay,payroll
+M003,Net Payroll,Total net payroll amount,Sum of net_pay,payroll
+M004,Attendance Rate,Attendance percentage,Present days / scheduled days * 100,attendance
+M005,Leave Days,Total recorded leave days,Sum of days,leave

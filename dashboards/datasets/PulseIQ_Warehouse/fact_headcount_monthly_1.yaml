@@ -1,0 +1,175 @@
+table_name: fact_headcount_monthly
+main_dttm_col: month_start_date
+currency_code_column: null
+description: null
+default_endpoint: null
+offset: 0
+cache_timeout: null
+catalog: pulseiq_warehouse
+schema: warehouse
+sql: null
+params: null
+template_params: null
+filter_select_enabled: true
+fetch_values_predicate: null
+extra: null
+normalize_columns: false
+always_filter_main_dttm: false
+folders: null
+uuid: ade628dc-dbf2-4ab2-94dc-cadd45a83e61
+metrics:
+- metric_name: count
+  verbose_name: COUNT(*)
+  metric_type: count
+  expression: COUNT(*)
+  description: null
+  d3format: null
+  currency: null
+  extra: null
+  warning_text: null
+columns:
+- column_name: attrition_rate_monthly_pct
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: NUMERIC(8, 4)
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: month_start_date
+  verbose_name: null
+  is_dttm: true
+  is_active: true
+  type: DATE
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: headcount_start
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: headcount_end
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: date_key
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: transfers_in
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: transfers_out
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: voluntary_exits
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: hires
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: exits
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: INTEGER
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+- column_name: department_id
+  verbose_name: null
+  is_dttm: false
+  is_active: true
+  type: TEXT
+  advanced_data_type: null
+  groupby: true
+  filterable: true
+  expression: null
+  description: null
+  python_date_format: null
+  datetime_format: null
+  extra: null
+version: 1.0.0
+database_uuid: bb2f394f-fdd8-4adf-829f-4ebad6bd2e9a
