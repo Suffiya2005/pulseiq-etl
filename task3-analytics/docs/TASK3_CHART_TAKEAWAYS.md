@@ -28,9 +28,7 @@ The current employee query shows QA Engineer as the most common role, with 50 em
 
 \## 5. Tenure Bands
 
-A provisional calculation using `valid\_from` shows 248 records in the 1–3 years band, 209 under 1 year, 156 in 3–5 years, and 132 in 5+ years. This is not confirmed employee tenure because `valid\_from` may represent the start of a history record rather than the original joining date.
-
-
+Using `hire\_date` from raw employee data and filtering to records marked current and active, the provisional result is: 1–3 years (123), under 1 year (95), 3–5 years (109), and 5+ years (114). The 1–3 years band is the largest. These counts total 441 and need reconciliation with the warehouse's current employee dimension count of 745 before being treated as the final warehouse metric.
 
 \## 6. Monthly Joiners vs Leavers
 
