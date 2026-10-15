@@ -1,4 +1,4 @@
-# PulseIQ ETL Pipeline
+﻿# PulseIQ ETL Pipeline
 
 ## Project Overview
 PulseIQ ETL is a Python-based data engineering project that extracts,
@@ -32,7 +32,7 @@ pulseiq-etl/
 -   --- clean/
 --- logs/
 --- rejected/
---- src/
+## Project Structure
 -   --- __init__.py
 -   --- pipeline.py
 -   --- quality_report.py
