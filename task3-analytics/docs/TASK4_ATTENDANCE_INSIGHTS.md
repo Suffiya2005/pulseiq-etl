@@ -37,3 +37,22 @@ HR should review leave coverage and staffing plans while considering headcount, 
 
 ## 4. Overall Recommendation
 Use the dashboard to identify months, departments, and employee-month records requiring review. Validate the underlying records and operational context before taking HR action.
+## 5. Weekday Attendance — Synthetic Demo Only
+
+A separate synthetic daily attendance dataset was created to
+demonstrate weekday-level analysis because the supplied
+attendance data contains monthly summaries rather than daily logs.
+
+Demo results:
+- Monday: 90.48%
+- Tuesday: 95.87%
+- Wednesday: 95.56%
+- Thursday: 93.85%
+- Friday: 91.06%
+
+These values are generated from simulated attendance probabilities.
+They are not actual PulseIQ workforce findings and must not be used
+to make HR decisions.
+
+The real weekday attendance requirement remains dependent on
+obtaining genuine or officially provided daily-level sample data.
