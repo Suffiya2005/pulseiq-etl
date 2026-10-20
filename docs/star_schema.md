@@ -76,3 +76,14 @@ A daily-grain attendance fact table cannot be produced accurately from
 this source alone. Daily-level source data is required to satisfy a
 daily attendance grain requirement without inventing records.
 
+## 8. Employee History Rule — SCD Type 2
+
+If an employee moves from Sales to Support in July:
+
+- June payroll belongs to Sales.
+- July payroll belongs to Support.
+- Join payroll to dim_employee using employee_key, not only employee_id.
+- Use the employee version effective during the payroll period.
+
+This preserves accurate historical payroll reporting when employees change departments.
+
