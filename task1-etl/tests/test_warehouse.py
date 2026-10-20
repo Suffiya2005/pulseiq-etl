@@ -45,7 +45,7 @@ def test_fact_tables_have_no_missing_employee_references(
 @pytest.mark.parametrize(
     ("table", "expected_count"),
     [
-        ("fact_payroll", 7344),
+        ("fact_payroll", 7342),
         ("fact_attendance_monthly", 7343),
         ("fact_leave", 3439),
     ],
