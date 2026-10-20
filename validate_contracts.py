@@ -28,7 +28,7 @@ def main():
         contract_columns = set(contract["column_name"])
 
         for column in sorted(actual_columns - contract_columns):
-            errors.append(f"{column}: missing contract")
+            errors.append(f"{column}: unexpected column")
 
         for column in sorted(contract_columns - actual_columns):
             errors.append(f"{column}: column missing from CSV")
@@ -90,8 +90,11 @@ def main():
 
         total_errors += len(errors)
 
-    print(f"\nTotal contract issues: {total_errors}")
+        print(f"\nTotal contract issues: {total_errors}")
     print("This is a validation report; no source data was changed.")
+
+    if total_errors > 0:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
