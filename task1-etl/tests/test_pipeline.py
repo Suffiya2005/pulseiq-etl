@@ -95,3 +95,23 @@ def test_negative_payroll_is_rejected():
     assert len(clean_df) == 0
     assert len(rejected) == 1
     assert rejected["reject_reason"].str.contains("negative_").any()
+
+
+def test_exact_duplicate_employee_row_is_rejected():
+    row = {
+        "employee_key": 101,
+        "employee_id": "E101",
+        "full_name": "Asha Kumar",
+        "hire_date": "2024-01-10",
+        "employment_status": "Active",
+        "is_current": "Y",
+        "exit_date": None,
+    }
+    df = pd.DataFrame([row, row])
+
+    clean_df, rejected = clean("employees", df)
+    
+    assert len(clean_df) == 0
+    assert len(rejected) == 2
+    assert rejected["reject_reason"].str.contains("duplicate_employee_key").all()
+    assert "duplicate_exact_row" in rejected.iloc[1]["reject_reason"]

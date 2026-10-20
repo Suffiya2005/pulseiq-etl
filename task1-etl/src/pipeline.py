@@ -288,10 +288,11 @@ def clean_employees(
     to_numeric(df, ["employee_key"])
 
     # Exact duplicate rows are removed.
-    df = df.drop_duplicates().reset_index(drop=True)
+    duplicate_mask = df.duplicated(keep="first")
+    df = df.reset_index(drop=True)
 
     reasons = pd.Series("", index=df.index, dtype="object")
-
+    add_reason(reasons, duplicate_mask, "duplicate_exact_row")
     for column in [
         "employee_key",
         "employee_id",
@@ -341,12 +342,8 @@ def clean_employees(
             df["date_of_birth"] > AS_OF_DATE,
             "date_of_birth_in_future",
         )
-        add_reason(
-        reasons,
-        df["exit_date"].notna()
-        & (df["hire_date"] > df["exit_date"]),
-        "hire_date_after_exit_date",
-    )
+       
+    
     df["tenure_days"] = (AS_OF_DATE - df["hire_date"]).dt.days
     df["tenure_years"] = (df["tenure_days"] / 365.25).round(2)
     # Reject overlapping employee history periods.
@@ -444,9 +441,10 @@ def clean_payroll(
                 errors="coerce",
             )
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    duplicate_mask = df.duplicated(keep="first")
+    df = df.reset_index(drop=True)
     reasons = pd.Series("", index=df.index, dtype="object")
-
+    add_reason(reasons, duplicate_mask, "duplicate_exact_row")
     for column in [
         "payroll_item_id",
         "employee_id",
@@ -518,9 +516,10 @@ def clean_attendance(
         if column in df.columns:
             df[column] = pd.to_numeric(df[column], errors="coerce")
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    duplicate_mask = df.duplicated(keep="first")
+    df = df.reset_index(drop=True)
     reasons = pd.Series("", index=df.index, dtype="object")
-
+    add_reason(reasons, duplicate_mask, "duplicate_exact_row")
     for column in [
         "attendance_fact_id",
         "employee_id",
@@ -593,9 +592,10 @@ def clean_leave(
     )
     to_numeric(df, ["days", "employee_key"])
 
-    df = df.drop_duplicates().reset_index(drop=True)
+    duplicate_mask = df.duplicated(keep="first")
+    df = df.reset_index(drop=True)
     reasons = pd.Series("", index=df.index, dtype="object")
-
+    add_reason(reasons, duplicate_mask, "duplicate_exact_row")
     for column in [
         "leave_request_id",
         "employee_id",
