@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS warehouse.fact_payroll (
     headcount_flag INTEGER
 );
 
+
 CREATE TABLE IF NOT EXISTS warehouse.fact_attendance_monthly (
     attendance_fact_id TEXT PRIMARY KEY,
     employee_id TEXT,
@@ -117,7 +118,13 @@ CREATE TABLE IF NOT EXISTS warehouse.fact_attendance_monthly (
     avg_hours_worked NUMERIC(8,2),
     overtime_hours NUMERIC(8,2),
     attendance_rate NUMERIC(8,4),
-    period_end_date DATE
+    period_end_date DATE,
+    FOREIGN KEY (date_key)
+        REFERENCES warehouse.dim_date(date_key),
+    FOREIGN KEY (employee_key)
+        REFERENCES warehouse.dim_employee(employee_key),
+    FOREIGN KEY (department_id)
+        REFERENCES warehouse.dim_department(department_id)
 );
 
 CREATE TABLE IF NOT EXISTS warehouse.fact_leave (
@@ -149,29 +156,9 @@ CREATE TABLE IF NOT EXISTS warehouse.fact_headcount_monthly (
     transfers_out INTEGER,
     headcount_end INTEGER,
     attrition_rate_monthly_pct NUMERIC(8,4),
-    PRIMARY KEY (date_key, department_id)
+    PRIMARY KEY (date_key, department_id),
+    FOREIGN KEY (date_key)
+        REFERENCES warehouse.dim_date(date_key),
+    FOREIGN KEY (department_id)
+        REFERENCES warehouse.dim_department(department_id)
 );
-
-CREATE INDEX IF NOT EXISTS idx_payroll_date
-    ON warehouse.fact_payroll(date_key);
-
-CREATE INDEX IF NOT EXISTS idx_payroll_department
-    ON warehouse.fact_payroll(department_id);
-
-CREATE INDEX IF NOT EXISTS idx_payroll_employee
-    ON warehouse.fact_payroll(employee_key);
-
-CREATE INDEX IF NOT EXISTS idx_attendance_date
-    ON warehouse.fact_attendance_monthly(date_key);
-
-CREATE INDEX IF NOT EXISTS idx_attendance_employee
-    ON warehouse.fact_attendance_monthly(employee_key);
-
-CREATE INDEX IF NOT EXISTS idx_leave_employee
-    ON warehouse.fact_leave(employee_key);
-
-CREATE INDEX IF NOT EXISTS idx_leave_start_date
-    ON warehouse.fact_leave(start_date_key);
-
-CREATE INDEX IF NOT EXISTS idx_headcount_department
-    ON warehouse.fact_headcount_monthly(department_id);
