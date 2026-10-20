@@ -1,4 +1,4 @@
-﻿"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
+"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
 
 from __future__ import annotations
 
@@ -417,9 +417,9 @@ def clean_salary(
 # 6. TRANSFORM PAYROLL
 # --------------------------------------------------
 
-
 def clean_payroll(
     source: pd.DataFrame,
+    valid_employee_keys: set | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     check_required(source, PAYROLL_REQUIRED, "payroll")
 
@@ -455,6 +455,14 @@ def clean_payroll(
             reasons,
             df[column].isna(),
             f"missing_or_invalid_{column}",
+        )
+
+    if valid_employee_keys is not None:
+        add_reason(
+            reasons,
+            df["employee_key"].notna()
+            & ~df["employee_key"].isin(valid_employee_keys),
+            "invalid_employee_dimension_key",
         )
 
     add_reason(
@@ -641,6 +649,7 @@ def clean_leave(
 def clean(
     dataset: str,
     df: pd.DataFrame,
+    employee_keys: set | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     cleaners = {
     "employees": clean_employees,
@@ -656,6 +665,8 @@ def clean(
             f"Supported datasets: {list(cleaners)}"
         )
 
+    if dataset == "payroll":
+        return clean_payroll(df, valid_employee_keys=employee_keys)
     return cleaners[dataset](df)
 
 
@@ -718,12 +729,27 @@ def main() -> None:
         "total_input": 0,
         "total_output": 0,
         "total_rejected": 0,
+
     }
+
+    valid_employee_keys = None
 
     for name in DATASETS:
         source = read_source(name)
 
-        valid, rejected = clean(name, source)
+        if name == "payroll":
+            valid, rejected = clean(
+                name, source, employee_keys=valid_employee_keys
+            )
+        else:
+            valid, rejected = clean(name, source)
+
+        if name == "employees":
+            valid_employee_keys = set(
+                pd.to_numeric(
+                    valid["employee_key"], errors="coerce"
+                ).dropna()
+            )
 
         result = save_dataset(name, valid, rejected)
         report["datasets"].append(result)
