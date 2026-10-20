@@ -14,13 +14,13 @@ Verify that the PulseIQ ETL pipeline can be run repeatedly and produces consiste
 
 
 
-Command used from the `task1-etl` directory:
+Command used from the project root:
 
 
 
 ```powershell
 
-python -m src.pipeline
+python run_task1.py
 
 ```
 
@@ -42,7 +42,7 @@ The pipeline was executed twice on 20 October 2026.
 
 | Salary | 4 | 4 | 0 | 4 | 0 |
 
-| Payroll | 7,344 | 7,344 | 0 | 7,344 | 0 |
+| Payroll | 7,344 | 7,342 | 2 | 7,342 | 2 |
 
 | Attendance | 7,343 | 7,343 | 0 | 7,343 | 0 |
 
@@ -68,9 +68,9 @@ The pipeline's output counts are repeatable for the tested source data. This dem
 
 
 
-\- Terminal output from the first execution.
+\- Terminal output from the first full execution (`python run_task1.py`).
 
-\- Terminal output from the second execution.
+\- Terminal output from the second full execution (`python run_task1.py`).
 
 \- `logs/run\_summary.json` from the latest execution.
 
