@@ -36,3 +36,5 @@ task1-etl/tests/*backup*
 # Task 1 backup files
 task1-etl/src/*before_duplicate_fix*
 task1-etl/src/*before_task1_fixes*
+# Temporary Excel lock files
+~$*.xlsx
