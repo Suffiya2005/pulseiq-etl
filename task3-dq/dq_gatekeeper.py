@@ -19,6 +19,7 @@ DB_CONFIG = {
     "password": os.getenv("PGPASSWORD"),
 }
 
+
 CHECKS = [
     {
         "id": "DQ-C01",
@@ -27,33 +28,51 @@ CHECKS = [
         "severity": "CRITICAL",
         "sql": """
             WITH payroll_monthly AS (
-                SELECT period_end_date,
-                       SUM(employer_cost) AS payroll_cost
+                SELECT
+                    DATE_TRUNC('month', period_end_date)::date AS month,
+                    SUM(employer_cost) AS payroll_cost
                 FROM warehouse.fact_payroll
-                GROUP BY period_end_date
+                GROUP BY 1
             ),
             ledger_monthly AS (
-                SELECT record->>'posting_period' AS posting_period,
-                       SUM(
-                           COALESCE((record->>'debit')::numeric, 0)
-                           - COALESCE((record->>'credit')::numeric, 0)
-                       ) AS salary_expense
+                SELECT
+                    LEFT(record->>'posting_period', 7) AS month,
+                    SUM(
+                        COALESCE(
+                            (record->>'debit')::numeric, 0
+                        )
+                    ) AS debits,
+                    SUM(
+                        COALESCE(
+                            (record->>'credit')::numeric, 0
+                        )
+                    ) AS credits
                 FROM dq_reference.fact_ledger
                 WHERE record->>'account_code'
                     IN ('5001', '5002', '5003', '5004', '5005')
-                GROUP BY record->>'posting_period'
+                GROUP BY 1
             )
-            SELECT p.period_end_date, p.payroll_cost,
-                   l.salary_expense,
-                   p.payroll_cost - l.salary_expense AS difference
+            SELECT
+                p.month,
+                p.payroll_cost,
+                l.debits,
+                l.credits,
+                p.payroll_cost - (l.debits - l.credits) AS difference
             FROM payroll_monthly p
             JOIN ledger_monthly l
-              ON p.period_end_date::text LIKE l.posting_period || '%'
-            WHERE ABS(p.payroll_cost - l.salary_expense) > 0.01
+              ON p.month::text = l.month
+            WHERE ABS(
+                p.payroll_cost - (l.debits - l.credits)
+            ) > 0.01
+            ORDER BY p.month
         """,
-        "reason": "Payroll totals must reconcile with salary-related ledger entries.",
+        "reason": (
+            "Payroll totals must reconcile with salary-related "
+            "ledger entries."
+        ),
     },
     {
+
         "id": "DQ-C02",
         "name": "Ledger balanced",
         "table": "fact_ledger",
@@ -71,7 +90,7 @@ CHECKS = [
         """,
         "reason": "Every ledger entry must have equal debit and credit totals.",
     },
-    {
+{
         "id": "DQ-C03",
         "name": "Unique payroll rows",
         "table": "fact_payroll",
@@ -87,7 +106,7 @@ CHECKS = [
         "reason": "Duplicate employee-month payroll rows can overstate payroll  totals.",
     },
     
-           {
+{
         "id": "DQ-C04",
         "name": "No orphan employees",
         "table": "fact_payroll / dim_employee",
@@ -96,7 +115,7 @@ CHECKS = [
         "reason": "Payroll employee IDs must exist in the employee dimension.",
     },
 
-    {
+{
         "id": "DQ-C05",
         "name": "No attendance after exit",
         "table": "fact_attendance_monthly",
@@ -114,7 +133,7 @@ CHECKS = [
 
         "reason": "Attendance must match a valid employee history period.",
     },
-    {
+{
         "id": "DQ-C06",
         "name": "Unpaid leave deducted",
         "table": "fact_attendance_monthly / fact_payroll",
@@ -130,7 +149,7 @@ CHECKS = [
         """,
         "reason": "Unpaid absences should be reflected in loss-of-pay days.",
     },
-    {
+{
         "id": "DQ-C07",
         "name": "Invoice arithmetic",
         "table": "fact_invoice",
@@ -144,7 +163,7 @@ CHECKS = [
         """,
         "reason": "Payments must not exceed invoice totals or create negative balances.",
     },
-    {
+{
         "id": "DQ-C08",
         "name": "Expense arithmetic",
         "table": "fact_expense",
@@ -162,7 +181,7 @@ CHECKS = [
         """,
         "reason": "Expense totals must equal the amount excluding GST plus GST.",
     },
-    {
+{
         "id": "DQ-C09",
         "name": "Task dates sensible",
         "table": "fact_task",
@@ -183,7 +202,7 @@ CHECKS = [
         """,
         "reason": "Task dates must be valid for cycle-time and delivery metrics.",
     },
-    {
+{
         "id": "DQ-C10",
         "name": "Leave dates sensible",
         "table": "fact_leave",
@@ -195,7 +214,7 @@ CHECKS = [
         """,
         "reason": "Leave end dates must not precede start dates.",
     },
-    {
+{
         "id": "DQ-C11",
         "name": "AI feeds are fresh",
         "table": "fact_attrition_risk",
@@ -213,7 +232,7 @@ CHECKS = [
         """,
         "reason": "Old predictions must not be presented as current risk scores.",
     },
-    {
+{
         "id": "DQ-C12",
         "name": "Dimension history does not overlap",
         "table": "dim_employee",
@@ -233,7 +252,7 @@ CHECKS = [
         """,
         "reason": "Overlapping employee history versions can duplicate fact joins.",
     },
-    {
+{
         "id": "DQ-C13",
         "name": "Pipeline freshness",
         "table": "logs/run_summary.json",
@@ -241,7 +260,7 @@ CHECKS = [
         "sql": None,
         "reason": "A stale pipeline means dashboards may use outdated data.",
     },
-    {
+{
         "id": "DQ-C14",
         "name": "Minimum group size",
         "table": "metric_dictionary / reporting queries",
@@ -416,6 +435,8 @@ def run_checks():
                         )
                     )
             
+            
+            
             elif check["id"] == "DQ-C05":
                 attendance = pd.read_excel(
                     WORKBOOK,
@@ -427,24 +448,65 @@ def run_checks():
                 )
 
                 attendance["period_end_date"] = pd.to_datetime(
-                    attendance["period_end_date"], errors="coerce"
+                    attendance["period_end_date"],
+                    errors="coerce"
                 )
                 employees["exit_date"] = pd.to_datetime(
-                    employees["exit_date"], errors="coerce"
+                    employees["exit_date"],
+                    errors="coerce"
+                )
+
+                employee_exits = (
+                    employees[["employee_id", "exit_date"]]
+                    .dropna(subset=["exit_date"])
+                    .groupby("employee_id", as_index=False)["exit_date"]
+                    .max()
+                )
+
+                employee_exits["exit_month_end"] = (
+                    employee_exits["exit_date"]
+                    + pd.offsets.MonthEnd(0)
                 )
 
                 checked = attendance.merge(
-                    employees[["employee_id", "exit_date"]].drop_duplicates(
-                        "employee_id"
-                    ),
+                    employee_exits[
+                        ["employee_id", "exit_month_end"]
+                    ],
                     on="employee_id",
-                    how="left"
+                    how="inner"
                 )
 
                 missing = checked[
-                    checked["exit_date"].notna()
-                    & (checked["period_end_date"] > checked["exit_date"])
+                    checked["period_end_date"].notna()
+                    & (
+                        checked["period_end_date"]
+                        > checked["exit_month_end"]
+                    )
                 ]
+
+                bad_rows = len(missing)
+                status = "PASS" if bad_rows == 0 else "FAIL"
+
+                message = (
+                    "No attendance found after employee exit month."
+                    if bad_rows == 0
+                    else "Attendance after exit month: "
+                    + ", ".join(
+                        missing["attendance_fact_id"].astype(str)
+                    )
+                )
+
+                status = "PASS" if bad_rows == 0 else "FAIL"
+
+                message = (
+                    "No attendance found after employee exit dates."
+                    if bad_rows == 0
+                    else "Attendance after exit: "
+                    + ", ".join(
+                        missing["attendance_fact_id"].astype(str)
+                    )
+                )
+
 
                 bad_rows = len(missing)
                 status = "PASS" if bad_rows == 0 else "FAIL"

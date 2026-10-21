@@ -1,15 +1,15 @@
 check_id,check_name,table_name,bad_rows,status,severity,risk_explanation,run_time
-DQ-C01,Payroll equals ledger,fact_payroll / fact_ledger,3,FAIL,CRITICAL,Payroll totals must reconcile with salary-related ledger entries.,2026-10-21 09:06:14.103474+00:00
-DQ-C02,Ledger balanced,fact_ledger,0,PASS,CRITICAL,Every ledger entry must have equal debit and credit totals.,2026-10-21 09:06:14.123709+00:00
-DQ-C03,Unique payroll rows,fact_payroll,2,FAIL,CRITICAL,Duplicate employee-month payroll rows can overstate payroll  totals.,2026-10-21 09:06:14.147864+00:00
-DQ-C04,No orphan employees,fact_payroll / dim_employee,2,FAIL,CRITICAL,"Orphan payroll IDs: PI-X0003, PI-X0004",2026-10-21 09:06:19.334355+00:00
-DQ-C05,No attendance after exit,fact_attendance_monthly,85,FAIL,WARNING,"Attendance after exit: FA-00085, FA-00333, FA-00468, FA-00668, FA-00994, FA-01063, FA-01421, FA-01446, FA-01583, FA-01696, FA-01861, FA-01863, FA-02109, FA-02321, FA-02337, FA-02438, FA-02606, FA-02823, FA-02994, FA-03033, FA-03076, FA-03180, FA-03192, FA-03427, FA-03461, FA-03684, FA-03729, FA-03927, FA-03994, FA-03999, FA-04074, FA-04165, FA-04184, FA-04229, FA-04254, FA-04334, FA-04427, FA-04452, FA-04458, FA-04469, FA-04523, FA-04675, FA-04740, FA-04834, FA-04874, FA-04909, FA-04916, FA-04978, FA-05073, FA-05078, FA-05086, FA-05144, FA-05210, FA-05253, FA-05276, FA-05323, FA-05410, FA-05429, FA-05477, FA-05521, FA-05523, FA-05545, FA-05558, FA-05559, FA-05590, FA-05811, FA-05912, FA-06058, FA-06143, FA-06204, FA-06207, FA-06343, FA-06364, FA-06475, FA-06605, FA-06884, FA-06904, FA-07062, FA-07097, FA-07134, FA-07161, FA-X0001, FA-X0002, FA-X0003, FA-X0004",2026-10-21 09:06:23.845262+00:00
-DQ-C06,Unpaid leave deducted,fact_attendance_monthly / fact_payroll,0,PASS,WARNING,Unpaid absences should be reflected in loss-of-pay days.,2026-10-21 09:06:23.864097+00:00
-DQ-C07,Invoice arithmetic,fact_invoice,1,FAIL,WARNING,Payments must not exceed invoice totals or create negative balances.,2026-10-21 09:06:23.872008+00:00
-DQ-C08,Expense arithmetic,fact_expense,1,FAIL,WARNING,Expense totals must equal the amount excluding GST plus GST.,2026-10-21 09:06:23.878663+00:00
-DQ-C09,Task dates sensible,fact_task,20,FAIL,WARNING,Task dates must be valid for cycle-time and delivery metrics.,2026-10-21 09:06:23.959926+00:00
-DQ-C10,Leave dates sensible,fact_leave,0,PASS,WARNING,Leave end dates must not precede start dates.,2026-10-21 09:06:23.965234+00:00
-DQ-C11,AI feeds are fresh,fact_attrition_risk,5,FAIL,WARNING,Old predictions must not be presented as current risk scores.,2026-10-21 09:06:23.970870+00:00
-DQ-C12,Dimension history does not overlap,dim_employee,1,FAIL,CRITICAL,Overlapping history for employee IDs: EMP-0001,2026-10-21 09:06:25.510346+00:00
-DQ-C13,Pipeline freshness,logs/run_summary.json,0,PASS,CRITICAL,Pipeline finished within the last 24 hours.,2026-10-21 09:06:25.511006+00:00
-DQ-C14,Minimum group size,metric_dictionary / reporting queries,0,PASS,CRITICAL,Positive minimum group-size thresholds are defined for 16 metrics.,2026-10-21 09:06:26.526742+00:00
+DQ-C01,Payroll equals ledger,fact_payroll / fact_ledger,0,PASS,CRITICAL,Payroll totals must reconcile with salary-related ledger entries.,2026-10-21 10:32:01.905400+00:00
+DQ-C02,Ledger balanced,fact_ledger,0,PASS,CRITICAL,Every ledger entry must have equal debit and credit totals.,2026-10-21 10:32:01.926235+00:00
+DQ-C03,Unique payroll rows,fact_payroll,2,FAIL,CRITICAL,Duplicate employee-month payroll rows can overstate payroll  totals.,2026-10-21 10:32:01.945278+00:00
+DQ-C04,No orphan employees,fact_payroll / dim_employee,2,FAIL,CRITICAL,"Orphan payroll IDs: PI-X0003, PI-X0004",2026-10-21 10:32:07.549194+00:00
+DQ-C05,No attendance after exit,fact_attendance_monthly,4,FAIL,WARNING,"Attendance after exit: FA-X0001, FA-X0002, FA-X0003, FA-X0004",2026-10-21 10:32:11.317101+00:00
+DQ-C06,Unpaid leave deducted,fact_attendance_monthly / fact_payroll,0,PASS,WARNING,Unpaid absences should be reflected in loss-of-pay days.,2026-10-21 10:32:11.335019+00:00
+DQ-C07,Invoice arithmetic,fact_invoice,1,FAIL,WARNING,Payments must not exceed invoice totals or create negative balances.,2026-10-21 10:32:11.341386+00:00
+DQ-C08,Expense arithmetic,fact_expense,1,FAIL,WARNING,Expense totals must equal the amount excluding GST plus GST.,2026-10-21 10:32:11.346882+00:00
+DQ-C09,Task dates sensible,fact_task,20,FAIL,WARNING,Task dates must be valid for cycle-time and delivery metrics.,2026-10-21 10:32:11.421983+00:00
+DQ-C10,Leave dates sensible,fact_leave,0,PASS,WARNING,Leave end dates must not precede start dates.,2026-10-21 10:32:11.427232+00:00
+DQ-C11,AI feeds are fresh,fact_attrition_risk,5,FAIL,WARNING,Old predictions must not be presented as current risk scores.,2026-10-21 10:32:11.432935+00:00
+DQ-C12,Dimension history does not overlap,dim_employee,1,FAIL,CRITICAL,Overlapping history for employee IDs: EMP-0001,2026-10-21 10:32:12.791834+00:00
+DQ-C13,Pipeline freshness,logs/run_summary.json,0,PASS,CRITICAL,Pipeline finished within the last 24 hours.,2026-10-21 10:32:12.792445+00:00
+DQ-C14,Minimum group size,metric_dictionary / reporting queries,0,PASS,CRITICAL,Positive minimum group-size thresholds are defined for 16 metrics.,2026-10-21 10:32:13.832867+00:00
