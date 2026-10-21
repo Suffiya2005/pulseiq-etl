@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 import psycopg
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CLEAN_FILE = ROOT / "data" / "clean" / "employees.csv"
 
 

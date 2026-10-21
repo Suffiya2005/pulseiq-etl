@@ -8,7 +8,7 @@ import pandas as pd
 import psycopg
 from psycopg import sql
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 CLEAN_DIR = ROOT / "data" / "clean"
 
 

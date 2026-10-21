@@ -164,24 +164,21 @@ if page == "Overview":
     with col4:
         st.markdown("### Task 4 — Attendance Trends Analysis")
         st.write(
-            "Analyze attendance and leave patterns, compare "
-            "departments, and review late arrivals and AI/ML anomalies."
+            "Analyze attendance and leave patterns, compare departments, "
+            "and review trends, late arrivals, and AI/ML anomalies."
         )
-
         st.markdown(
             "- Monthly attendance trend and 3-month rolling average\n"
             "- Department-wise attendance comparison\n"
             "- Leave days by type\n"
             "- Monthly late-arrival trend\n"
-            "- AI/ML flagged employee-month anomaly chart\n"
+            "- AI/ML anomaly chart\n"
             "- Weekday attendance trend (synthetic demo only)"
         )
-
         st.info(
-            "Select **Task 4** in the sidebar to open "
-            "the detailed attendance analysis."
+            "Select Task 4 - Attendance Trends Analysis in the sidebar "
+            "to open the detailed dashboard."
         )
-
     if SUMMARY_PATH.exists():
         st.subheader("Latest ETL Run")
 
@@ -501,685 +498,234 @@ elif page == "Task 4 - Attendance Trends Analysis":
     )
 
     task4_dir = ROOT / "task4-attendance"
-    task4_note = (
-        task4_dir / "docs" / "TASK4_ATTENDANCE_INSIGHTS.md"
-    )
-
+    task4_note = task4_dir / "docs" / "TASK4_ATTENDANCE_INSIGHTS.md"
     demo_candidates = [
         task4_dir / "data" / "attendance_daily_sample.csv",
         ROOT / "data" / "reference" / "attendance_daily_sample.csv",
     ]
-
-    demo_path = next(
-        (path for path in demo_candidates if path.exists()),
-        None,
-    )
-
+    demo_path = next((path for path in demo_candidates if path.exists()), None)
     anomaly_path = (
-        ROOT
-        / "data"
-        / "reference"
-        / "03_PulseIQ_Analytics_Star_Schema_Dataset.xlsx"
+        ROOT / "data" / "reference" / "03_PulseIQ_Analytics_Star_Schema_Dataset.xlsx"
     )
 
     attendance_path = CLEAN_DIR / "attendance.csv"
     employees_path = CLEAN_DIR / "employees.csv"
     leave_path = CLEAN_DIR / "leave.csv"
-
     attendance_df = read_csv_safely(attendance_path)
     employees_df = read_csv_safely(employees_path)
     leave_df = read_csv_safely(leave_path)
 
-    if attendance_df is None:
+    if attendance_df is None or attendance_df.empty:
         st.error(
-            f"Clean attendance data was not found at {attendance_path}. "
+            f"Clean attendance data was not found or is empty at {attendance_path}. "
             "Run the ETL pipeline first."
         )
     else:
         date_column = find_column(
-            attendance_df,
-            ["period_end_date", "attendance_date", "date"],
-            require_values=True,
+            attendance_df, ["period_end_date", "attendance_date", "date"], require_values=True
         )
-
-        scheduled_column = find_column(
-            attendance_df,
-            ["scheduled_days", "scheduled"],
-        )
-        present_column = find_column(
-            attendance_df,
-            ["present_days", "present"],
-        )
-        half_column = find_column(
-            attendance_df,
-            ["half_days_unpaid"],
-        )
-        late_column = find_column(
-            attendance_df,
-            ["late_arrivals", "late_arrival"],
-        )
+        scheduled_column = find_column(attendance_df, ["scheduled_days", "scheduled"])
+        present_column = find_column(attendance_df, ["present_days", "present"])
+        half_column = find_column(attendance_df, ["half_days_unpaid"])
+        late_column = find_column(attendance_df, ["late_arrivals", "late_arrival"])
 
         if not date_column or not scheduled_column or not present_column:
             st.error(
-                "Attendance data needs date, scheduled-days, and "
-                "present-days columns. Detected columns: "
-                + ", ".join(attendance_df.columns)
+                "Attendance data needs date, scheduled-days, and present-days columns. "
+                "Detected columns: " + ", ".join(attendance_df.columns)
             )
         else:
-            attendance_df[date_column] = pd.to_datetime(
-                attendance_df[date_column],
-                errors="coerce",
-            )
+            attendance_df[date_column] = pd.to_datetime(attendance_df[date_column], errors="coerce")
+            attendance_df = attendance_df.dropna(subset=[date_column]).copy()
+            attendance_df["_scheduled"] = numeric_column(attendance_df, scheduled_column)
+            attendance_df["_present"] = numeric_column(attendance_df, present_column)
+            attendance_df["_half"] = numeric_column(attendance_df, half_column) if half_column else 0
+            attendance_df["_late"] = numeric_column(attendance_df, late_column) if late_column else 0
+            attendance_df["_attendance_numerator"] = attendance_df["_present"] + 0.5 * attendance_df["_half"]
+            attendance_df["_month"] = attendance_df[date_column].dt.to_period("M").dt.to_timestamp()
 
-            attendance_df = attendance_df.dropna(
-                subset=[date_column]
-            ).copy()
+            # Resolve department names from attendance values first, then join employees.
+            department_names = {
+                "D00": "Executive Office", "D01": "Engineering", "D02": "Product & Design",
+                "D03": "Data & AI", "D04": "Sales", "D05": "Marketing",
+                "D06": "Customer Support", "D07": "Human Resources", "D08": "Finance & Accounts",
+                "D09": "Operations & IT", "D10": "Legal & Compliance",
+            }
+            attendance_df["_department_name"] = pd.NA
+            direct_name_col = find_column(attendance_df, ["department_name", "department", "dept_name"], require_values=True)
+            if direct_name_col:
+                attendance_df["_department_name"] = attendance_df[direct_name_col].astype("string").str.strip()
+            else:
+                direct_id_col = find_column(attendance_df, ["department_id", "dept_id"], require_values=True)
+                if direct_id_col:
+                    ids = attendance_df[direct_id_col].astype("string").str.strip().str.upper()
+                    attendance_df["_department_name"] = ids.map(department_names).fillna(ids)
 
-            attendance_df["_scheduled"] = numeric_column(
-                attendance_df,
-                scheduled_column,
-            )
-            attendance_df["_present"] = numeric_column(
-                attendance_df,
-                present_column,
-            )
-            attendance_df["_half"] = (
-                numeric_column(attendance_df, half_column)
-                if half_column
-                else 0
-            )
-            attendance_df["_late"] = (
-                numeric_column(attendance_df, late_column)
-                if late_column
-                else 0
-            )
-
-            attendance_df["_attendance_numerator"] = (
-                attendance_df["_present"]
-                + 0.5 * attendance_df["_half"]
-            )
-
-            attendance_df["_month"] = (
-                attendance_df[date_column]
-                .dt.to_period("M")
-                .dt.to_timestamp()
-            )
-
-            # Identify a populated department field or join through employees.
-            department_column = find_column(
-                attendance_df,
-                [
-                    "department_name",
-                    "department",
-                    "dept_name",
-                    "department_id",
-                    "dept_id",
-                ],
-                require_values=True,
-            )
-
-            if department_column is None and employees_df is not None:
-                attendance_key = find_column(
-                    attendance_df,
-                    ["employee_key", "employee_id", "employee_code"],
-                )
-                employee_key = find_column(
-                    employees_df,
-                    ["employee_key", "employee_id", "employee_code"],
-                )
-                employee_department = find_column(
-                    employees_df,
-                    [
-                        "department_name",
-                        "department",
-                        "dept_name",
-                        "department_id",
-                        "dept_id",
-                    ],
-                    require_values=True,
-                )
-
-                if (
-                    attendance_key
-                    and employee_key
-                    and employee_department
-                ):
-                    left = attendance_df.copy()
-                    right = employees_df[
-                        [employee_key, employee_department]
-                    ].copy()
-
-                    left["_employee_join_key"] = (
-                        left[attendance_key].astype(str)
-                    )
-                    right["_employee_join_key"] = (
-                        right[employee_key].astype(str)
-                    )
-
-                    right = right.drop_duplicates(
-                        "_employee_join_key"
-                    )
-
-                    merged = left.merge(
-                        right[
-                            ["_employee_join_key", employee_department]
-                        ],
-                        on="_employee_join_key",
-                        how="left",
-                        suffixes=("", "_employee"),
-                    )
-
-                    if merged[employee_department].notna().any():
-                        attendance_df = merged
-                        department_column = employee_department
+            if employees_df is not None and not employees_df.empty:
+                emp_key = find_column(employees_df, ["employee_key", "employee_id", "employeeid"], require_values=True)
+                emp_dept = find_column(employees_df, ["department_id", "dept_id"], require_values=True)
+                emp_name = find_column(employees_df, ["department_name", "department", "dept_name"], require_values=True)
+                att_key = find_column(attendance_df, ["employee_key", "employee_id", "employeeid"], require_values=True)
+                if att_key and emp_key and (emp_dept or emp_name):
+                    employee_map = employees_df[[emp_key] + ([emp_dept] if emp_dept else []) + ([emp_name] if emp_name else [])].copy()
+                    employee_map[emp_key] = employee_map[emp_key].astype("string").str.strip()
+                    employee_map = employee_map.drop_duplicates(subset=[emp_key], keep="first").set_index(emp_key)
+                    att_keys = attendance_df[att_key].astype("string").str.strip()
+                    if emp_name:
+                        mapped_names = att_keys.map(employee_map[emp_name])
+                    else:
+                        mapped_ids = att_keys.map(employee_map[emp_dept]).astype("string").str.strip().str.upper()
+                        mapped_names = mapped_ids.map(department_names).fillna(mapped_ids)
+                    attendance_df["_department_name"] = attendance_df["_department_name"].fillna(mapped_names)
 
             st.markdown("### Filters")
-
-            minimum_date = (
-                attendance_df[date_column].min().date()
-            )
-            maximum_date = (
-                attendance_df[date_column].max().date()
-            )
-
-            selected_range = st.date_input(
-                "Reporting date range",
-                value=(minimum_date, maximum_date),
-                min_value=minimum_date,
-                max_value=maximum_date,
-                key="task4_date_range",
-            )
-
-            filtered = attendance_df.copy()
-
-            if (
-                isinstance(selected_range, (tuple, list))
-                and len(selected_range) == 2
-            ):
-                start_date, end_date = selected_range
-
-                filtered = filtered[
-                    filtered[date_column].dt.date.between(
-                        start_date,
-                        end_date,
-                    )
-                ]
-
-            if department_column:
-                department_values = sorted(
-                    filtered[department_column]
-                    .dropna()
-                    .astype(str)
-                    .unique()
-                    .tolist()
+            if attendance_df.empty:
+                st.warning("No valid attendance dates are available.")
+            else:
+                minimum_date = attendance_df[date_column].min().date()
+                maximum_date = attendance_df[date_column].max().date()
+                selected_range = st.date_input(
+                    "Reporting date range", value=(minimum_date, maximum_date),
+                    min_value=minimum_date, max_value=maximum_date, key="task4_date_range",
                 )
+                filtered = attendance_df.copy()
+                if isinstance(selected_range, (tuple, list)) and len(selected_range) == 2:
+                    start_date, end_date = selected_range
+                    filtered = filtered[filtered[date_column].dt.date.between(start_date, end_date)]
 
+                department_values = sorted(
+                    filtered["_department_name"].dropna().astype(str).unique().tolist()
+                )
                 if department_values:
                     chosen_department = st.selectbox(
-                        "Department",
-                        ["All departments"] + department_values,
-                        key="task4_department",
+                        "Department", ["All departments"] + department_values, key="task4_department"
                     )
-
                     if chosen_department != "All departments":
-                        filtered = filtered[
-                            filtered[department_column].astype(str)
-                            == chosen_department
-                        ]
+                        filtered = filtered[filtered["_department_name"].astype(str) == chosen_department]
                 else:
-                    st.info(
-                        "Department values are blank in the available "
-                        "attendance data."
-                    )
-            else:
-                st.info(
-                    "Department filter is unavailable because a matching "
-                    "department field could not be found."
+                    st.info("Department values could not be mapped from attendance.csv and employees.csv.")
+
+                total_scheduled = filtered["_scheduled"].sum()
+                attendance_rate = 100 * filtered["_attendance_numerator"].sum() / total_scheduled if total_scheduled else 0
+                total_late = filtered["_late"].sum()
+                total_records = len(filtered)
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Weighted attendance rate", f"{attendance_rate:.2f}%")
+                col2.metric("Late arrivals", f"{total_late:,.0f}")
+                col3.metric("Employee-month records", f"{total_records:,}")
+
+                st.markdown("### 1. Monthly Attendance Trend")
+                monthly = (
+                    filtered.groupby("_month", as_index=False)
+                    .agg(scheduled_days=("_scheduled", "sum"), attendance_numerator=("_attendance_numerator", "sum"), late_arrivals=("_late", "sum"))
+                    .sort_values("_month")
                 )
+                monthly["attendance_rate_pct"] = 100 * monthly["attendance_numerator"] / monthly["scheduled_days"].mask(monthly["scheduled_days"].eq(0))
+                monthly["rolling_3_month_avg_pct"] = monthly["attendance_rate_pct"].rolling(3, min_periods=1).mean()
+                if not monthly.empty:
+                    trend = monthly.set_index("_month")[["attendance_rate_pct", "rolling_3_month_avg_pct"]].rename(columns={"attendance_rate_pct": "Monthly attendance %", "rolling_3_month_avg_pct": "3-month rolling average %"})
+                    st.line_chart(trend)
+                    monthly["mom_change_pp"] = monthly["attendance_rate_pct"].diff()
+                    st.dataframe(monthly[["_month", "attendance_rate_pct", "rolling_3_month_avg_pct", "mom_change_pp"]].rename(columns={"_month": "Month", "attendance_rate_pct": "Attendance rate %", "rolling_3_month_avg_pct": "3-month rolling avg %", "mom_change_pp": "MoM change (percentage points)"}), use_container_width=True, hide_index=True)
+                    st.caption("Weighted monthly rate = (present days + 0.5 × unpaid half-days) / scheduled days.")
+                else:
+                    st.info("No attendance records match the selected filters.")
 
-            total_scheduled = filtered["_scheduled"].sum()
+                st.markdown("### 2. Monthly Late Arrivals")
+                if not monthly.empty:
+                    st.line_chart(monthly.set_index("_month")[["late_arrivals"]])
 
-            attendance_rate = (
-                100
-                * filtered["_attendance_numerator"].sum()
-                / total_scheduled
-                if total_scheduled
-                else 0
-            )
-
-            total_late = filtered["_late"].sum()
-            total_records = len(filtered)
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric(
-                "Weighted attendance rate",
-                f"{attendance_rate:.2f}%",
-            )
-            col2.metric(
-                "Late arrivals",
-                f"{total_late:,.0f}",
-            )
-            col3.metric(
-                "Employee-month records",
-                f"{total_records:,}",
-            )
-
-            # Monthly attendance trend and rolling average.
-            st.markdown("### 1. Monthly Attendance Trend")
-
-            monthly = (
-                filtered.groupby("_month", as_index=False)
-                .agg(
-                    scheduled_days=("_scheduled", "sum"),
-                    attendance_numerator=(
-                        "_attendance_numerator",
-                        "sum",
-                    ),
-                    late_arrivals=("_late", "sum"),
-                )
-                .sort_values("_month")
-            )
-
-            monthly["attendance_rate_pct"] = (
-                100
-                * monthly["attendance_numerator"]
-                / monthly["scheduled_days"].mask(
-                    monthly["scheduled_days"].eq(0)
-                )
-            )
-
-            monthly["rolling_3_month_avg_pct"] = (
-                monthly["attendance_rate_pct"]
-                .rolling(3, min_periods=1)
-                .mean()
-            )
-
-            if not monthly.empty:
-                trend = monthly.set_index("_month")[
-                    [
-                        "attendance_rate_pct",
-                        "rolling_3_month_avg_pct",
-                    ]
-                ].rename(
-                    columns={
-                        "attendance_rate_pct": "Monthly attendance %",
-                        "rolling_3_month_avg_pct": (
-                            "3-month rolling average %"
-                        ),
-                    }
-                )
-
-                st.line_chart(trend)
-
-                monthly["mom_change_pp"] = (
-                    monthly["attendance_rate_pct"].diff()
-                )
-
-                st.dataframe(
-                    monthly[
-                        [
-                            "_month",
-                            "attendance_rate_pct",
-                            "rolling_3_month_avg_pct",
-                            "mom_change_pp",
-                        ]
-                    ].rename(
-                        columns={
-                            "_month": "Month",
-                            "attendance_rate_pct": "Attendance rate %",
-                            "rolling_3_month_avg_pct": (
-                                "3-month rolling avg %"
-                            ),
-                            "mom_change_pp": (
-                                "MoM change (percentage points)"
-                            ),
-                        }
-                    ),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-                st.caption(
-                    "Weighted monthly rate = (present days + "
-                    "0.5 × unpaid half-days) / scheduled days."
-                )
-
-            # Late arrivals.
-            st.markdown("### 2. Monthly Late Arrivals")
-
-            if not monthly.empty:
-                st.line_chart(
-                    monthly.set_index("_month")[["late_arrivals"]]
-                )
-
-            # Department comparison.
-            st.markdown("### 3. Department-wise Attendance")
-
-            if department_column:
+                st.markdown("### 3. Department-wise Attendance")
                 department_summary = (
-                    filtered.dropna(subset=[department_column])
-                    .groupby(department_column)
-                    .agg(
-                        scheduled_days=("_scheduled", "sum"),
-                        attendance_numerator=(
-                            "_attendance_numerator",
-                            "sum",
-                        ),
-                        late_arrivals=("_late", "sum"),
-                    )
-                    .reset_index()
+                    filtered.dropna(subset=["_department_name"])
+                    .groupby("_department_name", as_index=False)
+                    .agg(scheduled_days=("_scheduled", "sum"), attendance_numerator=("_attendance_numerator", "sum"), late_arrivals=("_late", "sum"))
                 )
-
-                department_summary["attendance_rate_pct"] = (
-                    100
-                    * department_summary["attendance_numerator"]
-                    / department_summary["scheduled_days"].mask(
-                        department_summary["scheduled_days"].eq(0)
-                    )
-                )
-
-                department_summary = department_summary.dropna(
-                    subset=["attendance_rate_pct"]
-                ).sort_values(
-                    "attendance_rate_pct",
-                    ascending=False,
-                )
-
                 if not department_summary.empty:
-                    st.bar_chart(
-                        department_summary.set_index(
-                            department_column
-                        )[["attendance_rate_pct"]]
-                    )
-
-                    highest = department_summary.iloc[0]
-                    lowest = department_summary.iloc[-1]
-
-                    st.write(
-                        f"Highest in selected data: "
-                        f"**{highest[department_column]}** "
-                        f"({highest['attendance_rate_pct']:.2f}%). "
-                        f"Lowest: **{lowest[department_column]}** "
-                        f"({lowest['attendance_rate_pct']:.2f}%)."
-                    )
-
-                    st.dataframe(
-                        department_summary,
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-            else:
-                st.info(
-                    "Department comparison needs a department field "
-                    "or valid employee mapping."
-                )
-
-            # Leave analysis.
-            st.markdown("### 4. Leave Days by Type")
-
-            if leave_df is not None:
-                leave_type_column = find_column(
-                    leave_df,
-                    [
-                        "leave_type_name",
-                        "leave_type",
-                        "leave_type_code",
-                        "type",
-                    ],
-                    require_values=True,
-                )
-
-                leave_days_column = find_column(
-                    leave_df,
-                    [
-                        "days",
-                        "leave_days",
-                        "duration_days",
-                        "leave_duration",
-                    ],
-                )
-
-                if leave_type_column and leave_days_column:
-                    leave_df["_leave_days"] = numeric_column(
-                        leave_df,
-                        leave_days_column,
-                    )
-
-                    leave_summary = (
-                        leave_df.groupby(leave_type_column)["_leave_days"]
-                        .sum()
-                        .sort_values(ascending=False)
-                    )
-
-                    st.bar_chart(leave_summary)
-
-                    st.dataframe(
-                        leave_summary.rename(
-                            "Total leave days"
-                        ).reset_index(),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
+                    department_summary["attendance_rate_pct"] = 100 * department_summary["attendance_numerator"] / department_summary["scheduled_days"].mask(department_summary["scheduled_days"].eq(0))
+                    department_summary = department_summary.dropna(subset=["attendance_rate_pct"]).sort_values("attendance_rate_pct", ascending=False)
+                    if not department_summary.empty:
+                        st.bar_chart(department_summary.set_index("_department_name")[["attendance_rate_pct"]])
+                        highest, lowest = department_summary.iloc[0], department_summary.iloc[-1]
+                        st.write(f"Highest in selected data: **{highest['_department_name']}** ({highest['attendance_rate_pct']:.2f}%). Lowest: **{lowest['_department_name']}** ({lowest['attendance_rate_pct']:.2f}%).")
+                        st.dataframe(department_summary, use_container_width=True, hide_index=True)
                 else:
-                    st.info(
-                        "Leave file found, but leave type/day columns "
-                        "need review."
-                    )
-            else:
-                st.info(
-                    f"Clean leave data not found at {leave_path}."
-                )
+                    st.info("Department comparison needs valid department values in employees.csv.")
 
-            # Weekday demonstration.
-            st.markdown(
-                "### 5. Weekday Attendance Trend — Synthetic Demo Only"
-            )
-
-            st.warning(
-                "These weekday results use simulated attendance. "
-                "They are for demonstration only and are not actual "
-                "PulseIQ employee findings."
-            )
-
-            if demo_path:
-                demo_df = read_csv_safely(demo_path)
-
-                weekday_column = find_column(
-                    demo_df,
-                    ["weekday"],
-                )
-                demo_present_column = find_column(
-                    demo_df,
-                    ["present"],
-                )
-                demo_scheduled_column = find_column(
-                    demo_df,
-                    ["scheduled"],
-                )
-                demo_late_column = find_column(
-                    demo_df,
-                    ["late_arrival"],
-                )
-
-                if (
-                    demo_df is not None
-                    and weekday_column
-                    and demo_present_column
-                    and demo_scheduled_column
-                ):
-                    demo_df["_present"] = numeric_column(
-                        demo_df,
-                        demo_present_column,
-                    )
-                    demo_df["_scheduled"] = numeric_column(
-                        demo_df,
-                        demo_scheduled_column,
-                    )
-                    demo_df["_late"] = (
-                        numeric_column(demo_df, demo_late_column)
-                        if demo_late_column
-                        else 0
-                    )
-
-                    weekday_summary = (
-                        demo_df.groupby(weekday_column)
-                        .agg(
-                            scheduled_days=("_scheduled", "sum"),
-                            present_days=("_present", "sum"),
-                            late_arrivals=("_late", "sum"),
-                        )
-                    )
-
-                    weekday_summary["attendance_rate_pct"] = (
-                        100
-                        * weekday_summary["present_days"]
-                        / weekday_summary["scheduled_days"].mask(
-                            weekday_summary["scheduled_days"].eq(0)
-                        )
-                    )
-
-                    weekday_order = [
-                        "Monday",
-                        "Tuesday",
-                        "Wednesday",
-                        "Thursday",
-                        "Friday",
-                        "Saturday",
-                        "Sunday",
-                    ]
-
-                    weekday_summary = weekday_summary.reindex(
-                        [
-                            day
-                            for day in weekday_order
-                            if day in weekday_summary.index
-                        ]
-                    )
-
-                    st.bar_chart(
-                        weekday_summary[["attendance_rate_pct"]]
-                    )
-
-                    st.dataframe(
-                        weekday_summary.reset_index(),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                else:
-                    st.info(
-                        "Synthetic demo data exists, but expected "
-                        "columns were not found."
-                    )
-            else:
-                st.info(
-                    "Synthetic weekday sample CSV was not found."
-                )
-
-            # AI/ML anomaly context.
-            st.markdown("### 6. AI/ML Attendance Anomaly Context")
-
-            if anomaly_path.exists():
-                try:
-                    anomaly_df = normalize_columns(
-                        pd.read_excel(
-                            anomaly_path,
-                            sheet_name="fact_anomaly",
-                        )
-                    )
-
-                    source_column = find_column(
-                        anomaly_df,
-                        ["source_dataset"],
-                    )
-                    flagged_column = find_column(
-                        anomaly_df,
-                        ["flagged"],
-                    )
-                    period_column = find_column(
-                        anomaly_df,
-                        ["period"],
-                    )
-
-                    if (
-                        source_column
-                        and flagged_column
-                        and period_column
-                    ):
-                        anomaly_df = anomaly_df[
-                            anomaly_df[source_column]
-                            .astype(str)
-                            .str.lower()
-                            .eq("attendance_monthly_features")
-                            & anomaly_df[flagged_column]
-                            .astype(str)
-                            .str.upper()
-                            .eq("Y")
-                        ].copy()
-
-                        anomaly_df[period_column] = pd.to_datetime(
-                            anomaly_df[period_column],
-                            errors="coerce",
-                        )
-
-                        anomaly_df = anomaly_df.dropna(
-                            subset=[period_column]
-                        )
-
-                        anomaly_df["_month"] = (
-                            anomaly_df[period_column]
-                            .dt.to_period("M")
-                            .dt.to_timestamp()
-                        )
-
-                        anomaly_monthly = (
-                            anomaly_df.groupby("_month")
-                            .size()
-                            .rename(
-                                "Flagged employee-month records"
-                            )
-                        )
-
-                        st.bar_chart(anomaly_monthly)
-
-                        st.caption(
-                            "The AI/ML sample flags employee-month "
-                            "records, not individual days."
-                        )
+                st.markdown("### 4. Leave Days by Type")
+                if leave_df is not None and not leave_df.empty:
+                    leave_type_column = find_column(leave_df, ["leave_type_name", "leave_type", "leave_type_code", "type"], require_values=True)
+                    leave_days_column = find_column(leave_df, ["days", "leave_days", "duration_days", "leave_duration"])
+                    if leave_type_column and leave_days_column:
+                        leave_df["_leave_days"] = numeric_column(leave_df, leave_days_column)
+                        leave_summary = leave_df.groupby(leave_type_column)["_leave_days"].sum().sort_values(ascending=False)
+                        st.bar_chart(leave_summary)
+                        st.dataframe(leave_summary.rename("Total leave days").reset_index(), use_container_width=True, hide_index=True)
                     else:
-                        st.info(
-                            "Anomaly workbook does not have the "
-                            "expected columns."
-                        )
+                        st.info("Leave file found, but leave type/day columns need review.")
+                else:
+                    st.info(f"Clean leave data not found at {leave_path}.")
 
-                except Exception as exc:
-                    st.warning(
-                        f"Could not load the anomaly workbook: {exc}"
-                    )
-            else:
-                st.info(
-                    f"AI/ML sample workbook not found at {anomaly_path}."
+                st.markdown("### 5. Weekday Attendance Trend — Synthetic Demo Only")
+
+                if demo_path:
+                    demo_df = read_csv_safely(demo_path)
+                    if demo_df is not None and not demo_df.empty:
+                        weekday_column = find_column(demo_df, ["weekday"])
+                        demo_present_column = find_column(demo_df, ["present"])
+                        demo_scheduled_column = find_column(demo_df, ["scheduled"])
+                        demo_late_column = find_column(demo_df, ["late_arrival"])
+                        if weekday_column and demo_present_column and demo_scheduled_column:
+                            demo_df["_present"] = numeric_column(demo_df, demo_present_column)
+                            demo_df["_scheduled"] = numeric_column(demo_df, demo_scheduled_column)
+                            demo_df["_late"] = numeric_column(demo_df, demo_late_column) if demo_late_column else 0
+                            weekday_summary = demo_df.groupby(weekday_column).agg(scheduled_days=("_scheduled", "sum"), present_days=("_present", "sum"), late_arrivals=("_late", "sum"))
+                            weekday_summary["attendance_rate_pct"] = 100 * weekday_summary["present_days"] / weekday_summary["scheduled_days"].mask(weekday_summary["scheduled_days"].eq(0))
+                            weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                            weekday_summary = weekday_summary.reindex([day for day in weekday_order if day in weekday_summary.index])
+                            st.bar_chart(weekday_summary[["attendance_rate_pct"]])
+                            st.dataframe(weekday_summary.reset_index(), use_container_width=True, hide_index=True)
+                        else:
+                            st.info("Synthetic demo data exists, but expected columns were not found.")
+                else:
+                    st.info("Synthetic weekday sample CSV was not found.")
+
+                st.markdown("### 6. AI/ML Attendance Anomaly Context")
+                if anomaly_path.exists():
+                    try:
+                        anomaly_df = normalize_columns(pd.read_excel(anomaly_path, sheet_name="fact_anomaly"))
+                        source_column = find_column(anomaly_df, ["source_dataset"])
+                        flagged_column = find_column(anomaly_df, ["flagged"])
+                        period_column = find_column(anomaly_df, ["period"])
+                        if source_column and flagged_column and period_column:
+                            anomaly_df = anomaly_df[
+                                anomaly_df[source_column].astype(str).str.lower().eq("attendance_monthly_features")
+                                & anomaly_df[flagged_column].astype(str).str.upper().eq("Y")
+                            ].copy()
+                            anomaly_df[period_column] = pd.to_datetime(anomaly_df[period_column], errors="coerce")
+                            anomaly_df = anomaly_df.dropna(subset=[period_column])
+                            anomaly_df["_month"] = anomaly_df[period_column].dt.to_period("M").dt.to_timestamp()
+                            anomaly_monthly = anomaly_df.groupby("_month").size().rename("Flagged employee-month records")
+                            if not anomaly_monthly.empty:
+                                st.bar_chart(anomaly_monthly)
+                            else:
+                                st.info("No flagged attendance anomaly records were found in the workbook.")
+                            st.caption("The AI/ML sample flags employee-month records, not individual days.")
+                        else:
+                            st.info("Anomaly workbook does not have the expected columns.")
+                    except Exception as exc:
+                        st.warning(f"Could not load the anomaly workbook: {exc}")
+                else:
+                    st.info(f"AI/ML sample workbook not found at {anomaly_path}.")
+
+                st.markdown("### 7. HR Takeaways and Limitations")
+                st.markdown(
+                    "- Compare lower-attendance months with leave, public holidays, staffing coverage, and reporting completeness before acting.\n"
+                    "- Department differences indicate where to review staffing and records; they do not establish causes.\n"
+                    "- The supplied PulseIQ attendance source is monthly aggregated, so actual weekday attendance cannot be derived from it.\n"
+                    "- The weekday chart is synthetic demonstration data, not real workforce results.\n"
+                    "- AI/ML flags represent employee-month records, not individual flagged days."
                 )
-
-            # HR takeaways and limitations.
-            st.markdown("### 7. HR Takeaways and Limitations")
-
-            st.markdown(
-                "- Compare lower-attendance months with leave, public "
-                "holidays, staffing coverage, and reporting completeness "
-                "before acting.\n"
-                "- Department differences indicate where to review staffing "
-                "and records; they do not establish causes.\n"
-                "- The supplied PulseIQ attendance source is monthly "
-                "aggregated, so actual weekday attendance cannot be "
-                "derived from it.\n"
-                "- The weekday chart is synthetic demonstration data, "
-                "not real workforce results.\n"
-                "- AI/ML flags represent employee-month records, "
-                "not individual flagged days."
-            )
-
-            if task4_note.exists():
-                with st.expander("View saved Task 4 insight note"):
-                    st.markdown(
-                        task4_note.read_text(encoding="utf-8")
-                    )
+                if task4_note.exists():
+                    with st.expander("View saved Task 4 insight note"):
+                        st.markdown(task4_note.read_text(encoding="utf-8"))
