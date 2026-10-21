@@ -1,15 +1,15 @@
 check_id,check_name,table_name,bad_rows,status,severity,risk_explanation,run_time
-DQ-C01,Payroll equals ledger,fact_payroll / fact_ledger,0,PASS,CRITICAL,Payroll totals must reconcile with salary-related ledger entries.,2026-10-21 10:32:01.905400+00:00
-DQ-C02,Ledger balanced,fact_ledger,0,PASS,CRITICAL,Every ledger entry must have equal debit and credit totals.,2026-10-21 10:32:01.926235+00:00
-DQ-C03,Unique payroll rows,fact_payroll,2,FAIL,CRITICAL,Duplicate employee-month payroll rows can overstate payroll  totals.,2026-10-21 10:32:01.945278+00:00
-DQ-C04,No orphan employees,fact_payroll / dim_employee,2,FAIL,CRITICAL,"Orphan payroll IDs: PI-X0003, PI-X0004",2026-10-21 10:32:07.549194+00:00
-DQ-C05,No attendance after exit,fact_attendance_monthly,4,FAIL,WARNING,"Attendance after exit: FA-X0001, FA-X0002, FA-X0003, FA-X0004",2026-10-21 10:32:11.317101+00:00
-DQ-C06,Unpaid leave deducted,fact_attendance_monthly / fact_payroll,0,PASS,WARNING,Unpaid absences should be reflected in loss-of-pay days.,2026-10-21 10:32:11.335019+00:00
-DQ-C07,Invoice arithmetic,fact_invoice,1,FAIL,WARNING,Payments must not exceed invoice totals or create negative balances.,2026-10-21 10:32:11.341386+00:00
-DQ-C08,Expense arithmetic,fact_expense,1,FAIL,WARNING,Expense totals must equal the amount excluding GST plus GST.,2026-10-21 10:32:11.346882+00:00
-DQ-C09,Task dates sensible,fact_task,20,FAIL,WARNING,Task dates must be valid for cycle-time and delivery metrics.,2026-10-21 10:32:11.421983+00:00
-DQ-C10,Leave dates sensible,fact_leave,0,PASS,WARNING,Leave end dates must not precede start dates.,2026-10-21 10:32:11.427232+00:00
-DQ-C11,AI feeds are fresh,fact_attrition_risk,5,FAIL,WARNING,Old predictions must not be presented as current risk scores.,2026-10-21 10:32:11.432935+00:00
-DQ-C12,Dimension history does not overlap,dim_employee,1,FAIL,CRITICAL,Overlapping history for employee IDs: EMP-0001,2026-10-21 10:32:12.791834+00:00
-DQ-C13,Pipeline freshness,logs/run_summary.json,0,PASS,CRITICAL,Pipeline finished within the last 24 hours.,2026-10-21 10:32:12.792445+00:00
-DQ-C14,Minimum group size,metric_dictionary / reporting queries,0,PASS,CRITICAL,Positive minimum group-size thresholds are defined for 16 metrics.,2026-10-21 10:32:13.832867+00:00
+DQ-C01,Payroll equals ledger,fact_payroll / fact_ledger,3,FAIL,CRITICAL,3 problematic row(s) found.,2026-10-21 14:48:02.421393+00:00
+DQ-C02,Ledger balanced,fact_ledger,0,PASS,CRITICAL,No data-quality issues found.,2026-10-21 14:48:02.441581+00:00
+DQ-C03,Unique payroll rows,fact_payroll,2,FAIL,CRITICAL,2 problematic row(s) found.,2026-10-21 14:48:02.462797+00:00
+DQ-C04,No orphan employees,fact_payroll / dim_employee,2,FAIL,CRITICAL,"Orphan payroll IDs: PI-X0003, PI-X0004",2026-10-21 14:48:07.645209+00:00
+DQ-C05,No attendance after exit,fact_attendance_monthly,4,FAIL,WARNING,"Attendance after exit: FA-X0001, FA-X0002, FA-X0003, FA-X0004",2026-10-21 14:48:11.662286+00:00
+DQ-C06,Unpaid leave deducted,fact_attendance_monthly / fact_payroll,0,PASS,WARNING,No data-quality issues found.,2026-10-21 14:48:11.684144+00:00
+DQ-C07,Invoice arithmetic,fact_invoice,1,FAIL,WARNING,1 problematic row(s) found.,2026-10-21 14:48:11.690229+00:00
+DQ-C08,Expense arithmetic,fact_expense,1,FAIL,WARNING,1 problematic row(s) found.,2026-10-21 14:48:11.696562+00:00
+DQ-C09,Task dates sensible,fact_task,20,FAIL,WARNING,20 problematic row(s) found.,2026-10-21 14:48:11.779299+00:00
+DQ-C10,Leave dates sensible,fact_leave,2,FAIL,WARNING,"Invalid leave dates: LR-000025, LR-002286",2026-10-21 14:48:13.602550+00:00
+DQ-C11,AI feeds are fresh,fact_attrition_risk,5,FAIL,WARNING,5 problematic row(s) found.,2026-10-21 14:48:13.608758+00:00
+DQ-C12,Dimension history does not overlap,dim_employee,1,FAIL,CRITICAL,Overlapping history for employee IDs: EMP-0001,2026-10-21 14:48:16.290330+00:00
+DQ-C13,Pipeline freshness,logs/run_summary.json,0,PASS,CRITICAL,Pipeline finished within the last 24 hours.,2026-10-21 14:48:16.290909+00:00
+DQ-C14,Minimum group size,metric_dictionary / reporting queries,0,PASS,CRITICAL,Positive minimum group-size thresholds are defined for 16 metrics.,2026-10-21 14:48:17.330948+00:00

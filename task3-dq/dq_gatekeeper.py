@@ -1,4 +1,3 @@
-
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import json
@@ -60,7 +59,7 @@ CHECKS = [
                 p.payroll_cost - (l.debits - l.credits) AS difference
             FROM payroll_monthly p
             JOIN ledger_monthly l
-              ON p.month::text = l.month
+              ON TO_CHAR(p.month, 'YYYY-MM') = l.month
             WHERE ABS(
                 p.payroll_cost - (l.debits - l.credits)
             ) > 0.01
@@ -343,11 +342,16 @@ def check_pipeline_freshness():
         return 1, "ERROR", f"Could not read pipeline summary: {exc}"
 
 
+
 def run_checks():
     if not WORKBOOK.exists():
-        raise FileNotFoundError(f"Reference workbook not found: {WORKBOOK}")
+        raise FileNotFoundError(
+            f"Reference workbook not found: {WORKBOOK}"
+        )
 
-    catalog = pd.read_excel(WORKBOOK, sheet_name="dq_checks_catalog")
+    catalog = pd.read_excel(
+        WORKBOOK, sheet_name="dq_checks_catalog"
+    )
     print(f"Loaded {len(catalog)} checks from the reference catalog.")
 
     results = []
@@ -374,184 +378,197 @@ def run_checks():
             bad_rows = None
             message = check["reason"]
 
-       
+            try:
+                if check["id"] == "DQ-C13":
+                    bad_rows, status, message = (
+                        check_pipeline_freshness()
+                    )
 
-            
-            if check["id"] == "DQ-C13":
-                bad_rows, status, message = check_pipeline_freshness()
+                elif check["id"] == "DQ-C04":
+                    payroll = pd.read_excel(
+                        WORKBOOK, sheet_name="fact_payroll"
+                    )
+                    employees = pd.read_excel(
+                        WORKBOOK, sheet_name="dim_employee"
+                    )
 
-            elif check["id"] == "DQ-C04":
-                payroll = pd.read_excel(
-                    WORKBOOK, sheet_name="fact_payroll"
-                )
-                employees = pd.read_excel(
-                    WORKBOOK, sheet_name="dim_employee"
-                )
-                missing = payroll[
-                    ~payroll["employee_id"].isin(employees["employee_id"])
-                ]
-                bad_rows = len(missing)
-                status = "PASS" if bad_rows == 0 else "FAIL"
-                message = (
-                    "All payroll employees exist in the employee dimension."
-                    if bad_rows == 0
-                    else "Orphan payroll IDs: "
-                    + ", ".join(missing["payroll_item_id"].astype(str))
-                )
-
-            
-            elif check["id"] == "DQ-C12":
-                employees = pd.read_excel(
-                    WORKBOOK, sheet_name="dim_employee"
-                )
-                employees["valid_from"] = pd.to_datetime(
-                    employees["valid_from"], errors="coerce"
-                )
-                employees["valid_to"] = pd.to_datetime(
-                    employees["valid_to"], errors="coerce"
-                )
-                employees = employees.sort_values(
-                    ["employee_id", "valid_from"]
-                )
-                previous_end = employees.groupby(
-                    "employee_id"
-                )["valid_to"].shift()
-
-                overlaps = employees[
-                    previous_end.notna()
-                    & (employees["valid_from"] <= previous_end)
-                ]
-
-                bad_rows = len(overlaps)
-                status = "PASS" if bad_rows == 0 else "FAIL"
-
-                if bad_rows == 0:
-                    message = "No overlapping employee history intervals."
-                else:
+                    missing = payroll[
+                        ~payroll["employee_id"].isin(
+                            employees["employee_id"]
+                        )
+                    ]
+                    bad_rows = len(missing)
+                    status = "PASS" if bad_rows == 0 else "FAIL"
                     message = (
-                        "Overlapping history for employee IDs: "
+                        "All payroll employees exist in the employee dimension."
+                        if bad_rows == 0
+                        else "Orphan payroll IDs: "
                         + ", ".join(
-                            overlaps["employee_id"].astype(str).unique()
+                            missing["payroll_item_id"].astype(str)
                         )
                     )
-            
-            
-            
-            elif check["id"] == "DQ-C05":
-                attendance = pd.read_excel(
-                    WORKBOOK,
-                    sheet_name="fact_attendance_monthly"
-                )
-                employees = pd.read_excel(
-                    WORKBOOK,
-                    sheet_name="dim_employee"
-                )
 
-                attendance["period_end_date"] = pd.to_datetime(
-                    attendance["period_end_date"],
-                    errors="coerce"
-                )
-                employees["exit_date"] = pd.to_datetime(
-                    employees["exit_date"],
-                    errors="coerce"
-                )
-
-                employee_exits = (
-                    employees[["employee_id", "exit_date"]]
-                    .dropna(subset=["exit_date"])
-                    .groupby("employee_id", as_index=False)["exit_date"]
-                    .max()
-                )
-
-                employee_exits["exit_month_end"] = (
-                    employee_exits["exit_date"]
-                    + pd.offsets.MonthEnd(0)
-                )
-
-                checked = attendance.merge(
-                    employee_exits[
-                        ["employee_id", "exit_month_end"]
-                    ],
-                    on="employee_id",
-                    how="inner"
-                )
-
-                missing = checked[
-                    checked["period_end_date"].notna()
-                    & (
-                        checked["period_end_date"]
-                        > checked["exit_month_end"]
+                elif check["id"] == "DQ-C05":
+                    attendance = pd.read_excel(
+                        WORKBOOK,
+                        sheet_name="fact_attendance_monthly"
                     )
-                ]
-
-                bad_rows = len(missing)
-                status = "PASS" if bad_rows == 0 else "FAIL"
-
-                message = (
-                    "No attendance found after employee exit month."
-                    if bad_rows == 0
-                    else "Attendance after exit month: "
-                    + ", ".join(
-                        missing["attendance_fact_id"].astype(str)
+                    employees = pd.read_excel(
+                        WORKBOOK, sheet_name="dim_employee"
                     )
-                )
 
-                status = "PASS" if bad_rows == 0 else "FAIL"
-
-                message = (
-                    "No attendance found after employee exit dates."
-                    if bad_rows == 0
-                    else "Attendance after exit: "
-                    + ", ".join(
-                        missing["attendance_fact_id"].astype(str)
+                    attendance["period_end_date"] = pd.to_datetime(
+                        attendance["period_end_date"],
+                        errors="coerce"
                     )
-                )
-
-
-                bad_rows = len(missing)
-                status = "PASS" if bad_rows == 0 else "FAIL"
-                message = (
-                    "No attendance found after employee exit dates."
-                    if bad_rows == 0
-                    else "Attendance after exit: "
-                    + ", ".join(
-                        missing["attendance_fact_id"].astype(str)
+                    employees["exit_date"] = pd.to_datetime(
+                        employees["exit_date"],
+                        errors="coerce"
                     )
-                )
 
-            elif check["id"] == "DQ-C14":
+                    exits = (
+                        employees[["employee_id", "exit_date"]]
+                        .dropna(subset=["exit_date"])
+                        .groupby("employee_id", as_index=False)["exit_date"]
+                        .max()
+                    )
+                    exits["exit_month_end"] = (
+                        exits["exit_date"] + pd.offsets.MonthEnd(0)
+                    )
 
-                metric_dict = pd.read_excel(
-                    WORKBOOK, sheet_name="metric_dictionary"
-                )
-                minimums = pd.to_numeric(
-                    metric_dict["minimum_group_size"],
-                    errors="coerce"
-                ).dropna()
+                    checked = attendance.merge(
+                        exits[["employee_id", "exit_month_end"]],
+                        on="employee_id",
+                        how="inner"
+                    )
+                    invalid = checked[
+                        checked["period_end_date"].notna()
+                        & (
+                            checked["period_end_date"]
+                            > checked["exit_month_end"]
+                        )
+                    ]
 
-                invalid = minimums[minimums <= 0]
-                bad_rows = len(invalid)
+                    bad_rows = len(invalid)
+                    status = "PASS" if bad_rows == 0 else "FAIL"
+                    message = (
+                        "No attendance found after employee exit month."
+                        if bad_rows == 0
+                        else "Attendance after exit: "
+                        + ", ".join(
+                            invalid["attendance_fact_id"].astype(str)
+                        )
+                    )
 
-                if bad_rows == 0:
-                    status = "PASS"
+                elif check["id"] == "DQ-C10":
+                    leave = pd.read_excel(
+                        WORKBOOK, sheet_name="fact_leave"
+                    )
+                    leave["start_date"] = pd.to_datetime(
+                        leave["start_date"], errors="coerce"
+                    )
+                    leave["end_date"] = pd.to_datetime(
+                        leave["end_date"], errors="coerce"
+                    )
+
+                    invalid = leave[
+                        leave["start_date"].notna()
+                        & leave["end_date"].notna()
+                        & (
+                            leave["end_date"]
+                            < leave["start_date"]
+                        )
+                    ]
+
+                    bad_rows = len(invalid)
+                    status = "PASS" if bad_rows == 0 else "FAIL"
+                    message = (
+                        "All leave dates are sensible."
+                        if bad_rows == 0
+                        else "Invalid leave dates: "
+                        + ", ".join(
+                            invalid["leave_request_id"].astype(str)
+                        )
+                    )
+
+                elif check["id"] == "DQ-C12":
+                    employees = pd.read_excel(
+                        WORKBOOK, sheet_name="dim_employee"
+                    )
+                    employees["valid_from"] = pd.to_datetime(
+                        employees["valid_from"], errors="coerce"
+                    )
+                    employees["valid_to"] = pd.to_datetime(
+                        employees["valid_to"], errors="coerce"
+                    )
+                    employees = employees.sort_values(
+                        ["employee_id", "valid_from"]
+                    )
+
+                    # Compare each interval with all previous intervals.
+                    overlap_ids = []
+                    for employee_id, group in employees.groupby(
+                        "employee_id"
+                    ):
+                        group = group.reset_index(drop=True)
+                        for i in range(len(group)):
+                            start = group.loc[i, "valid_from"]
+                            if pd.isna(start):
+                                continue
+
+                            for j in range(i):
+                                previous_end = group.loc[j, "valid_to"]
+                                if (
+                                    pd.isna(previous_end)
+                                    or start <= previous_end
+                                ):
+                                    overlap_ids.append(str(employee_id))
+                                    break
+                            if str(employee_id) in overlap_ids:
+                                continue
+
+                    overlap_ids = sorted(set(overlap_ids))
+                    bad_rows = len(overlap_ids)
+                    status = "PASS" if bad_rows == 0 else "FAIL"
+                    message = (
+                        "No overlapping employee history intervals."
+                        if bad_rows == 0
+                        else "Overlapping history for employee IDs: "
+                        + ", ".join(overlap_ids)
+                    )
+
+                elif check["id"] == "DQ-C14":
+                    metric_dict = pd.read_excel(
+                        WORKBOOK, sheet_name="metric_dictionary"
+                    )
+                    minimums = pd.to_numeric(
+                        metric_dict["minimum_group_size"],
+                        errors="coerce"
+                    ).dropna()
+
+                    invalid = minimums[minimums <= 0]
+                    bad_rows = len(invalid)
+                    status = "PASS" if bad_rows == 0 else "FAIL"
                     message = (
                         f"Positive minimum group-size thresholds are defined "
                         f"for {len(minimums)} metrics."
+                        if bad_rows == 0
+                        else "Some minimum group-size thresholds are not positive."
                     )
-                else:
-                    status = "FAIL"
-                    message = (
-                        "Some minimum group-size thresholds are not positive."
-                    )
-            elif check["sql"] is not None:
-                try:
-                    if not all(
-                        table_exists(conn, table.strip())
+
+                elif check["sql"] is not None:
+                    tables = [
+                        table.strip()
                         for table in check["table"].split("/")
+                    ]
+
+                    if not all(
+                        table_exists(conn, table)
+                        for table in tables
                     ):
                         status = "NOT_APPLICABLE"
                         message = (
-                            f"{check['reason']} Required primary table "
+                            f"{check['reason']} Required table "
                             "is not loaded."
                         )
                     else:
@@ -561,12 +578,18 @@ def run_checks():
 
                         bad_rows = len(rows)
                         status = "PASS" if bad_rows == 0 else "FAIL"
+                        message = (
+                            "No data-quality issues found."
+                            if bad_rows == 0
+                            else f"{bad_rows} problematic row(s) found."
+                        )
 
-                except Exception as exc:
-                    conn.rollback()
-                    status = "ERROR"
-                    message = f"{check['reason']} SQL error: {exc}"
-                    print(f"\n{check['id']} ERROR: {exc}")
+            except Exception as exc:
+                conn.rollback()
+                status = "ERROR"
+                bad_rows = None
+                message = f"{check['reason']} Error: {exc}"
+                print(f"{check['id']} ERROR: {exc}")
 
             results.append({
                 "check_id": check["id"],
@@ -602,21 +625,20 @@ def run_checks():
 
         conn.commit()
 
-        report = pd.DataFrame(results)
-        REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        report.to_csv(REPORT_PATH, index=False)
+    report = pd.DataFrame(results)
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    report.to_csv(REPORT_PATH, index=False)
 
-        print("\nDATA QUALITY GATEKEEPER REPORT")
-        print("=" * 76)
-        print(
-            report[
-                ["check_id", "check_name", "bad_rows", "status", "severity"]
-            ].to_string(index=False)
-        )
-
-        print("\nStatus totals:")
-        print(report["status"].value_counts().to_string())
-        print(f"\nCSV report saved to: {REPORT_PATH}")
+    print("\nDATA QUALITY GATEKEEPER REPORT")
+    print("=" * 76)
+    print(
+        report[
+            ["check_id", "check_name", "bad_rows", "status", "severity"]
+        ].to_string(index=False)
+    )
+    print("\nStatus totals:")
+    print(report["status"].value_counts().to_string())
+    print(f"\nCSV report saved to: {REPORT_PATH}")
 
 
 if __name__ == "__main__":
