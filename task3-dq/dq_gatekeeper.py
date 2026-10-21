@@ -541,19 +541,30 @@ def run_checks():
                     metric_dict = pd.read_excel(
                         WORKBOOK, sheet_name="metric_dictionary"
                     )
-                    minimums = pd.to_numeric(
-                        metric_dict["minimum_group_size"],
-                        errors="coerce"
-                    ).dropna()
-
-                    invalid = minimums[minimums <= 0]
-                    bad_rows = len(invalid)
+                    raw_minimums = (
+                        metric_dict["minimum_group_size"]
+                        .dropna()
+                        .astype(str)
+                        .str.strip()
+                    )
+                    minimums = raw_minimums.str.extract(
+                        r"^(\d+(?:\.\d+)?)",
+                        expand=False,
+                    )
+                    numeric_minimums = pd.to_numeric(
+                        minimums, errors="coerce"
+                    )
+                    invalid = (
+                        minimums.isna()
+                        | numeric_minimums.isna()
+                        | (numeric_minimums <= 0)
+                    )
+                    bad_rows = int(invalid.sum())
                     status = "PASS" if bad_rows == 0 else "FAIL"
                     message = (
                         f"Positive minimum group-size thresholds are defined "
-                        f"for {len(minimums)} metrics."
-                        if bad_rows == 0
-                        else "Some minimum group-size thresholds are not positive."
+                        f"for {len(raw_minimums)} metrics; "
+                        f"{bad_rows} configured thresholds are invalid."
                     )
 
                 elif check["sql"] is not None:
