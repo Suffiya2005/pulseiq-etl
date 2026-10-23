@@ -52,9 +52,9 @@ def get_connection():
     )
 
 
-def warehouse_query(query):
+def warehouse_query(query, params=None):
     with get_connection() as conn:
-        return pd.read_sql_query(query, conn)
+        return pd.read_sql_query(query, conn, params=params)
 
 
 def normalize_columns(frame):
@@ -931,9 +931,10 @@ elif page == "Task 5 - Workforce & Headcount":
                     LEFT JOIN warehouse.dim_location l
                       ON e.work_location = l.work_location
                     WHERE e.is_current = TRUE
+                      AND e.department_id = ANY(%s)
                     GROUP BY 1, 2
                     ORDER BY 1, 2
-                """)
+                """, (selected_departments,))
 
                 tier_data = location_mode.groupby(
                     "city_tier", as_index=False
