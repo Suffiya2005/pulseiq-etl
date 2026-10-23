@@ -32,6 +32,7 @@ page = st.sidebar.radio(
         "Task 2 - Warehouse",
         "Task 3 - Analytics",
         "Task 4 - Attendance Trends Analysis",
+        "Task 5 - Workforce & Headcount",
     ],
 )
 
@@ -729,3 +730,187 @@ elif page == "Task 4 - Attendance Trends Analysis":
                 if task4_note.exists():
                     with st.expander("View saved Task 4 insight note"):
                         st.markdown(task4_note.read_text(encoding="utf-8"))
+
+
+# TASK 5 ? WORKFORCE & HEADCOUNT
+elif page == "Task 5 - Workforce & Headcount":
+    st.subheader("Task 5 ? Workforce & Headcount")
+    st.caption("CEO workforce dashboard | Governed metric views only")
+
+    department_names = {
+        "D00": "Executive Office",
+        "D01": "Engineering",
+        "D02": "Product & Design",
+        "D03": "Data & AI",
+        "D04": "Sales",
+        "D05": "Marketing",
+        "D06": "Customer Support",
+        "D07": "Human Resources",
+        "D08": "Finance & Accounts",
+        "D09": "Operations & IT",
+        "D10": "Legal & Compliance",
+    }
+
+    try:
+        headcount = warehouse_query("""
+            SELECT month_start_date, department_id, headcount
+            FROM warehouse.metric_m01_headcount
+            ORDER BY month_start_date, department_id
+        """)
+
+        hires = warehouse_query("""
+            SELECT month_start_date, department_id, hires
+            FROM warehouse.metric_m02_hires
+            ORDER BY month_start_date, department_id
+        """)
+
+        exits = warehouse_query("""
+            SELECT month_start_date, department_id, exits
+            FROM warehouse.metric_m03_exits
+            ORDER BY month_start_date, department_id
+        """)
+
+        if headcount.empty:
+            st.warning("No headcount records are available in the governed metric view.")
+        else:
+            headcount["month_start_date"] = pd.to_datetime(headcount["month_start_date"])
+            hires["month_start_date"] = pd.to_datetime(hires["month_start_date"])
+            exits["month_start_date"] = pd.to_datetime(exits["month_start_date"])
+
+            min_date = headcount["month_start_date"].min().date()
+            max_date = headcount["month_start_date"].max().date()
+
+            st.markdown("### Filters")
+            filter_col1, filter_col2 = st.columns(2)
+
+            with filter_col1:
+                selected_departments = st.multiselect(
+                    "Department",
+                    options=sorted(headcount["department_id"].dropna().unique()),
+                    default=sorted(headcount["department_id"].dropna().unique()),
+                    format_func=lambda d: f"{d} ? {department_names.get(d, d)}",
+                )
+
+            with filter_col2:
+                date_range = st.date_input(
+                    "Date range",
+                    value=(min_date, max_date),
+                    min_value=min_date,
+                    max_value=max_date,
+                )
+
+            if isinstance(date_range, (tuple, list)) and len(date_range) == 2:
+                start_date, end_date = date_range
+            else:
+                start_date, end_date = min_date, max_date
+
+            start_ts = pd.Timestamp(start_date)
+            end_ts = pd.Timestamp(end_date)
+
+            filtered = headcount[
+                headcount["department_id"].isin(selected_departments)
+                & headcount["month_start_date"].between(start_ts, end_ts)
+            ].copy()
+
+            filtered_hires = hires[
+                hires["department_id"].isin(selected_departments)
+                & hires["month_start_date"].between(start_ts, end_ts)
+            ].copy()
+
+            filtered_exits = exits[
+                exits["department_id"].isin(selected_departments)
+                & exits["month_start_date"].between(start_ts, end_ts)
+            ].copy()
+
+            if filtered.empty:
+                st.info("No headcount data matches the selected filters.")
+            else:
+                latest_month = filtered["month_start_date"].max()
+                latest = filtered[filtered["month_start_date"] == latest_month]
+                current_headcount = int(latest["headcount"].sum())
+
+                previous_month = latest_month - pd.DateOffset(months=1)
+                previous = filtered[filtered["month_start_date"] == previous_month]
+                previous_headcount = int(previous["headcount"].sum()) if not previous.empty else None
+
+                total_hires = int(filtered_hires["hires"].sum()) if not filtered_hires.empty else 0
+                total_exits = int(filtered_exits["exits"].sum()) if not filtered_exits.empty else 0
+
+                k1, k2, k3, k4 = st.columns(4)
+                k1.metric("Latest Headcount", f"{current_headcount:,}")
+                k2.metric(
+                    "Month-on-Month Change",
+                    "N/A" if previous_headcount is None else f"{current_headcount - previous_headcount:+,}",
+                )
+                k3.metric("Hires in Selected Period", f"{total_hires:,}")
+                k4.metric("Exits in Selected Period", f"{total_exits:,}")
+
+                st.markdown("### CEO Questions")
+                st.markdown(
+                    "1. What is our latest available workforce size?\n"
+                    "2. How has headcount changed over time?\n"
+                    "3. Which departments have the largest teams?\n"
+                    "4. How many hires and exits occurred in the selected period?\n"
+                    "5. What location-tier and work-mode data is available for workforce planning?"
+                )
+
+                st.markdown("### Headcount trend")
+                trend = (
+                    filtered.groupby("month_start_date", as_index=False)["headcount"]
+                    .sum()
+                    .sort_values("month_start_date")
+                )
+                st.line_chart(trend, x="month_start_date", y="headcount")
+                first_value = int(trend.iloc[0]["headcount"])
+                last_value = int(trend.iloc[-1]["headcount"])
+                st.caption(
+                    f"Insight: Headcount changed from {first_value:,} to {last_value:,} "
+                    f"across the selected date range."
+                )
+
+                st.markdown("### Department workforce breakdown")
+                dept = (
+                    latest.groupby("department_id", as_index=False)["headcount"]
+                    .sum()
+                    .sort_values("headcount", ascending=False)
+                )
+                dept["department"] = dept["department_id"].map(department_names).fillna(dept["department_id"])
+                dept_chart = dept.rename(columns={"department": "Department", "headcount": "Employees"})
+                st.bar_chart(dept_chart, x="Department", y="Employees", horizontal=True)
+                if not dept.empty:
+                    st.caption(
+                        f"Insight: {dept.iloc[0]['department']} has the largest headcount "
+                        f"({int(dept.iloc[0]['headcount']):,}) in the latest selected month."
+                    )
+
+                st.markdown("### Hires and exits")
+                movement = pd.merge(
+                    filtered_hires.groupby("month_start_date", as_index=False)["hires"].sum(),
+                    filtered_exits.groupby("month_start_date", as_index=False)["exits"].sum(),
+                    on="month_start_date",
+                    how="outer",
+                ).fillna(0).sort_values("month_start_date")
+                if not movement.empty:
+                    movement_chart = movement.rename(
+                        columns={"month_start_date": "Month", "hires": "Hires", "exits": "Exits"}
+                    ).sort_values("Month")
+                    st.line_chart(movement_chart, x="Month", y=["Hires", "Exits"])
+                    st.caption(
+                        f"Insight: The selected period contains {total_hires:,} hires "
+                        f"and {total_exits:,} exits."
+                    )
+                else:
+                    st.info("No hires or exits are available for the selected filters.")
+
+                st.markdown("### Location tier and work mode")
+                st.info(
+                    "Not displayed yet: the current warehouse does not contain "
+                    "warehouse.dim_location or governed location-tier/work-mode metric views. "
+                    "Add governed metric views before displaying these breakdowns."
+                )
+
+    except Exception as exc:
+        st.error(f"Task 5 dashboard could not load: {exc}")
+        st.caption(
+            "Check the database connection settings and availability of the Task 5 metric views."
+        )
