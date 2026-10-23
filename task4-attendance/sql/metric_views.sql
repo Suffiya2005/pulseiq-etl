@@ -420,26 +420,31 @@ FROM dq_reference.fact_attrition_risk
 GROUP BY record->>'as_of_date', record->>'department_id'
 HAVING COUNT(DISTINCT record->>'employee_id') >= 10;
 
-CREATE VIEW warehouse.metric_m28_forecast_error_mape AS
+CREATE OR REPLACE VIEW warehouse.metric_m28_forecast_error_mape AS
 WITH comparison AS (
     SELECT
         f.forecast_month AS month_start_date,
         f.department_id,
         f.model_version,
         f.method,
-        h.headcount_end::NUMERIC AS actual_headcount,
-        f.forecast_value::NUMERIC AS forecast_headcount,
-        100.0 * ABS(
-            h.headcount_end::NUMERIC - f.forecast_value::NUMERIC
-        ) / NULLIF(h.headcount_end::NUMERIC, 0)
-            AS absolute_percentage_error_pct,
         CASE
             WHEN f.model_version = 'naive-previous-month-backtest-1'
                 THEN 'HISTORICAL_BACKTEST'
+            WHEN h.headcount_end IS NULL
+                THEN 'SUPPLIED_FORECAST_PENDING_ACTUALS'
             ELSE 'SUPPLIED_FORECAST'
-        END AS evaluation_type
+        END AS evaluation_type,
+        h.headcount_end::NUMERIC AS actual_headcount,
+        f.forecast_value::NUMERIC AS forecast_headcount,
+        CASE
+            WHEN h.headcount_end > 0 THEN
+                100.0 * ABS(
+                    h.headcount_end::NUMERIC - f.forecast_value::NUMERIC
+                ) / h.headcount_end::NUMERIC
+            ELSE NULL
+        END AS absolute_percentage_error_pct
     FROM warehouse.fact_forecast f
-    JOIN warehouse.fact_headcount_monthly h
+    LEFT JOIN warehouse.fact_headcount_monthly h
       ON h.month_start_date = f.forecast_month
      AND h.department_id = f.department_id
     WHERE f.metric = 'headcount_end'
@@ -448,7 +453,6 @@ WITH comparison AS (
           'trend-seasonal-baseline-0.1',
           'naive-previous-month-backtest-1'
       )
-      AND h.headcount_end > 0
 )
 SELECT
     month_start_date,
