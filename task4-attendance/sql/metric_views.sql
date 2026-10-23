@@ -388,45 +388,21 @@ HAVING COUNT(*) FILTER (
       AND completed_at >= started_at
 ) >= 5;
 
-CREATE VIEW warehouse.metric_m26_anomaly_flag_rate AS
-WITH source_population AS (
-    SELECT
-        'attendance_monthly_features'::TEXT AS source_dataset,
-        DATE_TRUNC('month', period_end_date)::DATE AS month_start,
-        COUNT(*)::BIGINT AS source_population_rows
-    FROM warehouse.fact_attendance_monthly
-    GROUP BY DATE_TRUNC('month', period_end_date)::DATE
-
-    UNION ALL
-
-    SELECT
-        'payroll_monthly_features'::TEXT AS source_dataset,
-        DATE_TRUNC('month', period_end_date)::DATE AS month_start,
-        COUNT(*)::BIGINT AS source_population_rows
-    FROM warehouse.fact_payroll
-    GROUP BY DATE_TRUNC('month', period_end_date)::DATE
-),
-flagged AS (
-    SELECT
-        source_dataset,
-        DATE_TRUNC('month', period)::DATE AS month_start,
-        COUNT(*) FILTER (WHERE flagged = 'Y')::BIGINT AS flagged_rows
-    FROM warehouse.fact_anomaly
-    GROUP BY source_dataset, DATE_TRUNC('month', period)::DATE
-)
+CREATE OR REPLACE VIEW warehouse.metric_m26_anomaly_flag_rate AS
 SELECT
-    p.source_dataset,
-    p.month_start,
-    p.source_population_rows,
-    a.flagged_rows,
+    source_dataset,
+    DATE_TRUNC('month', period)::DATE AS month_start,
+    COUNT(*)::BIGINT AS scored_records,
+    COUNT(*) FILTER (WHERE flagged = 'Y')::BIGINT AS flagged_records,
+    COUNT(*) FILTER (WHERE flagged = 'N')::BIGINT AS unflagged_records,
     ROUND(
-        100.0 * a.flagged_rows / NULLIF(p.source_population_rows, 0),
+        100.0 * COUNT(*) FILTER (WHERE flagged = 'Y')
+        / NULLIF(COUNT(*), 0),
         4
     ) AS anomaly_flag_rate_pct,
-    'ESTIMATED_FROM_MATCHED_SOURCE_POPULATION'::TEXT AS rate_status
-FROM source_population p
-JOIN flagged a USING (source_dataset, month_start)
-WHERE a.flagged_rows > 0;
+    'SCORED_RECORDS_ONLY_INCOMPLETE_COVERAGE'::TEXT AS rate_status
+FROM warehouse.fact_anomaly
+GROUP BY source_dataset, DATE_TRUNC('month', period)::DATE;
 
 CREATE VIEW warehouse.metric_m27_high_risk_share AS
 SELECT record->>'as_of_date' AS as_of_date,
