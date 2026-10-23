@@ -1,4 +1,4 @@
-# Task 4 — Governed Metric Layer Validation Evidence
+﻿# Task 4 — Governed Metric Layer Validation Evidence
 
 ## 1. Summary
 
@@ -172,3 +172,25 @@ Some ledger, invoice, task and attrition-risk sources are stored under `dq_refer
 
 
 * M28's 880 rows are historical naive backtest comparisons only. The supplied future forecast model still has no overlapping actual months, so its measured forecast accuracy remains unavailable.
+
+## 11. Final follow-up validation
+
+### 11.1 Starter SQL examples
+The original `05_Starter/metric_views_examples.sql` file was not available in the project files searched. As a documented substitute, `task4-attendance/sql/metric_views_examples_verified.sql` was created and executed successfully with `ON_ERROR_STOP=1`. All three queries passed:
+1. Metric catalog lookup returned M07, M13 and M28.
+2. Department D01 attendance trend returned April-June 2025.
+3. Historical forecast backtest summary returned 880 evaluated rows and mean absolute percentage error of 2.6157%, covering February 2020 to September 2026.
+These are replacement examples; the unavailable original starter file is not claimed to have been executed.
+
+### 11.2 M26 anomaly matching and denominator caveat
+Reconciliation found 221 flagged attendance anomaly records; all 221 matched source attendance rows by employee and month, across 159 distinct employees. Payroll reconciliation found 184 flagged records, all 184 matching exact payroll record IDs, across 92 distinct employees.
+The M26 view reports source-population counts and the matched flagged-record counts by month. However, `warehouse.fact_anomaly` contains only `flagged = 'Y'` records for these model versions in the inspected data. The completeness of model scoring across the entire source population therefore cannot be independently established. `anomaly_flag_rate_pct` remains an estimated source-population share and must not be represented as a fully verified model flag rate.
+
+### 11.3 M28 forecast accuracy limitation
+The historical naive previous-month headcount backtest returned 880 comparisons with mean APE/MAPE of 2.6157% for February 2020 through September 2026. This is a historical baseline diagnostic and is not the official supplied forecast model's accuracy.
+Actual headcount data currently ends in September 2026, while supplied official forecasts cover future months beginning October 2026. Official forecast accuracy cannot be calculated until actuals for the corresponding forecast months are available.
+
+### 11.4 Final acceptance status
+The 28-view governed metric layer, 28-row metric catalog, five manual metric checks, privacy audit, replacement SQL examples and validation evidence are implemented and tested. The original starter-file execution could not be reproduced because that file was unavailable. M26 remains explicitly estimated because scoring coverage is unverified; official future forecast accuracy remains pending actual data. These are documented source/data limitations, not claims of completed validation.
+
+
