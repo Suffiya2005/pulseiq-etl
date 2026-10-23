@@ -215,3 +215,17 @@ The original `fact_anomaly` worksheet was inspected directly. It contains 405 ro
 
 **Closure decision:** The missing original starter SQL file is documented, and three replacement examples have been saved and executed. M26's data limitation has been investigated and confirmed. Official supplied-forecast accuracy cannot yet be measured because corresponding future actuals are unavailable. Neither M26 nor M28 is reported as fully verified beyond the available evidence.
 
+
+## 12. Final M26/M28 SQL follow-up (2026-10-23)
+
+### M26 - Scored-record flag rate
+
+The `warehouse.metric_m26_anomaly_flag_rate` view now calculates the flag rate using the number of records actually present in `warehouse.fact_anomaly` as its denominator. It reports scored, flagged (`Y`), and unflagged (`N`) counts and labels the result `SCORED_RECORDS_ONLY_INCOMPLETE_COVERAGE`.
+
+Database verification returned 221 attendance records and 184 payroll records; all 405 supplied anomaly records are flagged `Y`, with zero `N` records. The resulting 100% flag rate applies only to these scored records. Source populations contain 7,343 attendance rows and 7,342 payroll rows, so full-population scoring coverage remains unverified. This does not validate or reproduce the original anomaly model.
+
+### M28 - Future forecasts and actuals
+
+The `warehouse.metric_m28_forecast_error_mape` view now retains forecast rows when actual headcount is not yet available. Verification returned 880 historical naive-baseline comparisons (February 2020 through September 2026) and 60 department-level supplied forecasts (October 2026 through March 2027) with missing actuals and no calculated errors.
+
+The historical naive baseline's MAPE is 2.5999% in the current database view. This is not the official trend-seasonal model's accuracy. Official forecast accuracy remains pending corresponding actual headcount data.
