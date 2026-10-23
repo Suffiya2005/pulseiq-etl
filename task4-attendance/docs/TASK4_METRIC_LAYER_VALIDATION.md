@@ -186,10 +186,25 @@ These are replacement examples; the unavailable original starter file is not cla
 Reconciliation found 221 flagged attendance anomaly records; all 221 matched source attendance rows by employee and month, across 159 distinct employees. Payroll reconciliation found 184 flagged records, all 184 matching exact payroll record IDs, across 92 distinct employees.
 The M26 view reports source-population counts and the matched flagged-record counts by month. However, `warehouse.fact_anomaly` contains only `flagged = 'Y'` records for these model versions in the inspected data. The completeness of model scoring across the entire source population therefore cannot be independently established. `anomaly_flag_rate_pct` remains an estimated source-population share and must not be represented as a fully verified model flag rate.
 
+
+
 ### 11.3 M28 forecast accuracy limitation
 The historical naive previous-month headcount backtest returned 880 comparisons with mean APE/MAPE of 2.6157% for February 2020 through September 2026. This is a historical baseline diagnostic and is not the official supplied forecast model's accuracy.
 Actual headcount data currently ends in September 2026, while supplied official forecasts cover future months beginning October 2026. Official forecast accuracy cannot be calculated until actuals for the corresponding forecast months are available.
 
+### 11.3.1 Reconstructed headcount forecast backtest
+
+- Backtest results file: `task4-attendance/docs/HEADCOUNT_RECONSTRUCTED_BACKTEST.csv`.
+- Method: reconstructed 36-month linear trend with half-strength month-of-year seasonality.
+- Evaluation horizon: six months, using rolling historical forecast origins.
+- Forecast comparisons: 2,640 across 11 departments.
+- Evaluation period: January 2023 through September 2026.
+- Overall mean absolute error (MAE): 2.8943 employees.
+- Overall mean absolute percentage error (MAPE): 9.8672%.
+- Highest department-level MAPE: D07, 19.3089%.
+- D00 MAPE: 0%; this department has a constant headcount of 1 in the evaluated records, so its result is not a meaningful accuracy benchmark.
+
+**Limitation:** The original supplied model implementation was not found in the inspected project files. This backtest uses a reconstructed approximation of the documented method and does not establish the official model's accuracy. Its results must be reported separately from the historical naive baseline and the supplied future forecasts.
 ### 11.4 Final acceptance status
 The 28-view governed metric layer, 28-row metric catalog, five manual metric checks, privacy audit, replacement SQL examples and validation evidence are implemented and tested. The original starter-file execution could not be reproduced because that file was unavailable. M26 remains explicitly estimated because scoring coverage is unverified; official future forecast accuracy remains pending actual data. These are documented source/data limitations, not claims of completed validation.
 
