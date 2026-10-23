@@ -486,6 +486,24 @@ elif page == "Task 3 - Analytics":
         "linked here rather than embedded inside Streamlit."
     )
 
+    st.markdown("### C14 — Minimum Group Size Privacy Check")
+    st.write(
+        "Reporting groups below their metric-specific minimum "
+        "are suppressed to protect employee privacy."
+    )
+
+    st.info(
+        "Minimum group size: 10 for M04, M05, M06 and M27; "
+        "5 for other configured metrics. Task-level metrics use "
+        "a minimum of 5 tasks."
+    )
+    st.caption(
+        "The Gatekeeper's C14 report remains the audit record "
+        "of detected undersized groups. This section documents "
+        "the rule; actual metric values must be suppressed at "
+        "the point where those values are rendered."
+    )
+
 
 # ============================================================
 # TASK 4 — ATTENDANCE TRENDS ANALYSIS
@@ -903,10 +921,49 @@ elif page == "Task 5 - Workforce & Headcount":
                     st.info("No hires or exits are available for the selected filters.")
 
                 st.markdown("### Location tier and work mode")
-                st.info(
-                    "Not displayed yet: the current warehouse does not contain "
-                    "warehouse.dim_location or governed location-tier/work-mode metric views. "
-                    "Add governed metric views before displaying these breakdowns."
+
+                location_mode = warehouse_query("""
+                    SELECT
+                        COALESCE(l.city_tier, 'Unknown') AS city_tier,
+                        COALESCE(e.work_mode, 'Unknown') AS work_mode,
+                        COUNT(*) AS employees
+                    FROM warehouse.dim_employee e
+                    LEFT JOIN warehouse.dim_location l
+                      ON e.work_location = l.work_location
+                    WHERE e.is_current = TRUE
+                    GROUP BY 1, 2
+                    ORDER BY 1, 2
+                """)
+
+                tier_data = location_mode.groupby(
+                    "city_tier", as_index=False
+                )["employees"].sum()
+
+                mode_data = location_mode.groupby(
+                    "work_mode", as_index=False
+                )["employees"].sum()
+
+                chart_col1, chart_col2 = st.columns(2)
+
+                with chart_col1:
+                    st.markdown("#### Employees by city tier")
+                    st.bar_chart(
+                        tier_data,
+                        x="city_tier",
+                        y="employees",
+                    )
+
+                with chart_col2:
+                    st.markdown("#### Employees by work mode")
+                    st.bar_chart(
+                        mode_data,
+                        x="work_mode",
+                        y="employees",
+                    )
+
+                st.caption(
+                    "Counts use current employee records. Unknown values are "
+                    "shown separately rather than inferred."
                 )
 
     except Exception as exc:
