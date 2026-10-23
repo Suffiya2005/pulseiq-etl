@@ -194,3 +194,9 @@ Actual headcount data currently ends in September 2026, while supplied official 
 The 28-view governed metric layer, 28-row metric catalog, five manual metric checks, privacy audit, replacement SQL examples and validation evidence are implemented and tested. The original starter-file execution could not be reproduced because that file was unavailable. M26 remains explicitly estimated because scoring coverage is unverified; official future forecast accuracy remains pending actual data. These are documented source/data limitations, not claims of completed validation.
 
 
+
+### 11.5 Confirmation from the original anomaly workbook
+The original `fact_anomaly` worksheet was inspected directly. It contains 405 rows: 221 flagged attendance records and 184 flagged payroll records. All 405 rows have `flagged = 'Y'`; no `flagged = 'N'` rows are supplied. Therefore, the workbook does not establish the complete scored population or the model's exact flag rate. M26 remains an explicitly estimated source-population share until complete scoring output, including unflagged observations or equivalent scoring-coverage evidence, is provided.
+
+**Closure decision:** The missing original starter SQL file is documented, and three replacement examples have been saved and executed. M26's data limitation has been investigated and confirmed. Official supplied-forecast accuracy cannot yet be measured because corresponding future actuals are unavailable. Neither M26 nor M28 is reported as fully verified beyond the available evidence.
+
