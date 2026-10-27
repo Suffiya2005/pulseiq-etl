@@ -34,6 +34,7 @@ page = st.sidebar.radio(
         "Task 4 - Attendance Trends Analysis",
         "Task 5 - Workforce & Headcount",
         "Task 6 - Attendance & Leave Trends",
+        "Task 7 - Attrition Analytics",
     ],
 )
 
@@ -1742,4 +1743,197 @@ elif page == "Task 6 - Attendance & Leave Trends":
                     )
     except Exception as exc:
         st.error("Task 6 - Attendance & Leave Trends could not be loaded.")
+        st.exception(exc)
+
+elif page == "Task 7 - Attrition Analytics":
+    st.header("Task 7 - Attrition Analytics")
+    st.caption(
+        "Actual exits and attrition are shown separately from model predictions. "
+        "Department-level reporting suppresses groups below 10."
+    )
+
+    try:
+        # Actual monthly exits: only departments meeting the privacy threshold.
+        exits = warehouse_query("""
+            SELECT
+                h.month_start_date,
+                h.department_id,
+                d.department_name,
+                h.exits,
+                h.voluntary_exits,
+                GREATEST(h.exits - h.voluntary_exits, 0) AS other_exits
+            FROM warehouse.fact_headcount_monthly h
+            LEFT JOIN warehouse.dim_department d
+                ON h.department_id = d.department_id
+            WHERE h.headcount_start >= 10
+            ORDER BY h.month_start_date, d.department_name
+        """)
+
+        rates = warehouse_query("""
+            SELECT
+                month_start_date,
+                department_id,
+                headcount_start,
+                exits,
+                attrition_rate_monthly_pct
+            FROM warehouse.metric_m04_monthly_attrition_rate
+            ORDER BY month_start_date, department_id
+        """)
+
+        risk = warehouse_query("""
+            SELECT
+                r.as_of_date,
+                r.department_id,
+                d.department_name,
+                r.employees_in_group,
+                r.high_risk_employees,
+                r.high_risk_share_pct
+            FROM warehouse.metric_m27_high_risk_share r
+            LEFT JOIN warehouse.dim_department d
+                ON r.department_id = d.department_id
+            WHERE r.employees_in_group >= 10
+            ORDER BY r.as_of_date, r.high_risk_share_pct DESC
+        """)
+
+        if exits.empty:
+            st.info("No actual exit records meet the reporting threshold.")
+        else:
+            st.subheader("1. Actual Attrition")
+            monthly = (
+                exits.groupby("month_start_date", as_index=False)
+                .agg(
+                    exits=("exits", "sum"),
+                    voluntary_exits=("voluntary_exits", "sum"),
+                    other_exits=("other_exits", "sum"),
+                )
+                .sort_values("month_start_date")
+            )
+
+            st.markdown("**Monthly exits**")
+            st.line_chart(
+                monthly.set_index("month_start_date")[["exits"]]
+            )
+
+            st.dataframe(monthly, use_container_width=True, hide_index=True)
+
+            st.markdown("**Department comparison**")
+            department_summary = (
+                exits.groupby(
+                    ["department_id", "department_name"],
+                    dropna=False,
+                    as_index=False,
+                )
+                .agg(
+                    exits=("exits", "sum"),
+                    voluntary_exits=("voluntary_exits", "sum"),
+                    other_exits=("other_exits", "sum"),
+                )
+                .sort_values("exits", ascending=False)
+            )
+            st.bar_chart(
+                department_summary.set_index("department_name")[["exits"]]
+            )
+            st.dataframe(
+                department_summary,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.markdown("**Monthly attrition rate**")
+            if not rates.empty:
+                rate_trend = (
+                    rates.groupby("month_start_date", as_index=False)
+                    .agg(
+                        attrition_rate_monthly_pct=(
+                            "attrition_rate_monthly_pct", "mean"
+                        )
+                    )
+                    .sort_values("month_start_date")
+                )
+                st.line_chart(
+                    rate_trend.set_index("month_start_date")
+                )
+                st.caption(
+                    "The trend is the mean of eligible department-level rates; "
+                    "it is not a workforce-weighted overall rate."
+                )
+
+            st.subheader("2. Exit Types")
+            st.caption(
+                "'Other exits' means total exits minus voluntary exits "
+                "in the monthly source data."
+            )
+            st.dataframe(
+                monthly[
+                    ["month_start_date", "voluntary_exits", "other_exits"]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.subheader("3. Tenure at Exit")
+            st.info(
+                "Not displayed yet: the currently verified monthly facts do "
+                "not contain employee hire dates and individual exit dates. "
+                "We will add tenure buckets only after confirming a suitable "
+                "source table."
+            )
+
+            st.subheader("4. Predicted, not certain")
+            st.warning(
+                "These are model estimates, not confirmed departures. "
+                "Risk scores must not be treated as proof of an employee's "
+                "intent or used alone to make employment decisions."
+            )
+
+            if risk.empty:
+                st.info(
+                    "No prediction groups meet the minimum group size of 10."
+                )
+            else:
+                risk_display = risk[
+                    [
+                        "as_of_date",
+                        "department_name",
+                        "employees_in_group",
+                        "high_risk_employees",
+                        "high_risk_share_pct",
+                    ]
+                ].copy()
+
+                # Display dates without the midnight timestamp.
+                risk_display["as_of_date"] = pd.to_datetime(
+                    risk_display["as_of_date"], errors="coerce"
+                ).dt.strftime("%Y-%m-%d")
+
+                                # Suppress small high-risk counts and their percentages.
+                # The total group size must still meet the minimum of 10.
+                small_high_risk = risk_display["high_risk_employees"] < 5
+                risk_display.loc[
+                    small_high_risk,
+                    ["high_risk_employees", "high_risk_share_pct"],
+                ] = pd.NA
+
+                risk_display = risk_display.rename(
+                    columns={
+                        "as_of_date": "Prediction date",
+                        "department_name": "Department",
+                        "employees_in_group": "Group size",
+                        "high_risk_employees": "High-risk count (suppressed if <5)",
+                        "high_risk_share_pct": "High-risk share (%)",
+                    }
+                )
+
+                st.dataframe(
+                    risk_display,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                st.caption(
+                    "High-risk counts and shares are suppressed when fewer "
+                    "than 5 people are classified as high risk. A blank means "
+                    "suppressed, not zero. Predictions are estimates only."
+                )
+    except Exception as exc:
+        st.error("Task 7 - Attrition Analytics could not be loaded.")
         st.exception(exc)
