@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import re
 from pathlib import Path
@@ -1830,14 +1830,45 @@ elif page == "Task 7 - Attrition Analytics":
                 )
                 .sort_values("exits", ascending=False)
             )
+            
             st.bar_chart(
                 department_summary.set_index("department_name")[["exits"]]
             )
+
+            st.subheader("Key Findings")
+            
+            total_exits = int(monthly["exits"].sum())
+            total_voluntary = int(monthly["voluntary_exits"].sum())
+            voluntary_pct = (
+                total_voluntary / total_exits * 100
+                if total_exits else 0
+            )
+
+            top_department = department_summary.iloc[0]
+            peak_month = monthly.loc[monthly["exits"].idxmax()]
+            peak_month_label = pd.to_datetime(
+                peak_month["month_start_date"]
+            ).strftime("%B %Y")
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total exits", total_exits)
+            col1.caption(
+                f"Voluntary exits: {total_voluntary} ({voluntary_pct:.1f}%)"
+            )
+            col2.metric(
+                "Top department",
+                top_department["department_name"],
+            )
+            col2.caption(f"Exits: {int(top_department['exits'])}")
+            col3.metric("Peak month", peak_month_label)
+            col3.caption(f"Exits: {int(peak_month['exits'])}")
+
             st.dataframe(
                 department_summary,
                 use_container_width=True,
                 hide_index=True,
             )
+
 
             st.markdown("**Monthly attrition rate**")
             if not rates.empty:
@@ -1863,8 +1894,11 @@ elif page == "Task 7 - Attrition Analytics":
                 "'Other exits' means total exits minus voluntary exits "
                 "in the monthly source data."
             )
+            st.markdown("**Latest 12 months of exit types**")
+            exit_types_recent = monthly.tail(12).copy()
+
             st.dataframe(
-                monthly[
+                exit_types_recent[
                     ["month_start_date", "voluntary_exits", "other_exits"]
                 ],
                 use_container_width=True,
@@ -1908,11 +1942,15 @@ elif page == "Task 7 - Attrition Analytics":
 
                                 # Suppress small high-risk counts and their percentages.
                 # The total group size must still meet the minimum of 10.
-                small_high_risk = risk_display["high_risk_employees"] < 5
+                
+                small_high_risk = (
+                    risk_display["high_risk_employees"].between(1, 4)
+                )
                 risk_display.loc[
                     small_high_risk,
                     ["high_risk_employees", "high_risk_share_pct"],
                 ] = pd.NA
+
 
                 risk_display = risk_display.rename(
                     columns={
@@ -1930,9 +1968,9 @@ elif page == "Task 7 - Attrition Analytics":
                     hide_index=True,
                 )
                 st.caption(
-                    "High-risk counts and shares are suppressed when fewer "
-                    "than 5 people are classified as high risk. A blank means "
-                    "suppressed, not zero. Predictions are estimates only."
+                  "High-risk counts from 1 to 4 are suppressed. A displayed "
+                  "zero means no high-risk people were recorded. Blank values "
+                  "mean suppressed. Predictions are estimates only."
                 )
     except Exception as exc:
         st.error("Task 7 - Attrition Analytics could not be loaded.")
