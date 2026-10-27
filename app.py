@@ -1197,27 +1197,49 @@ elif page == "Task 6 - Attendance & Leave Trends":
                     "Weighted attendance = total present days / "
                     "total scheduled days. The source is monthly aggregated."
                 )
+                attendance_chart = monthly[
+                    ["month", "attendance_rate_pct"]
+                ].copy()
 
-                monthly["rolling_3m_attendance_pct"] = (
-                    monthly["attendance_rate_pct"]
+                attendance_chart = attendance_chart.rename(
+                    columns={
+                        "month": "Month",
+                        "attendance_rate_pct": "Attendance rate (%)",
+                    }
+                )
+
+                attendance_chart["3-month rolling average (%)"] = (
+                    attendance_chart["Attendance rate (%)"]
                     .rolling(window=3, min_periods=1)
                     .mean()
                 )
 
+                attendance_chart["Month"] = (
+                    attendance_chart["Month"].astype(str)
+                )
                 attendance_chart = monthly[
-                    [
-                        "month",
-                        "attendance_rate_pct",
-                        "rolling_3m_attendance_pct",
-                    ]
-                ].rename(columns={
-                    "attendance_rate_pct": "Attendance rate (%)",
-                    "rolling_3m_attendance_pct": "3-month rolling average (%)",
-                })
+                    ["month", "attendance_rate_pct"]
+                ].copy()
 
+                attendance_chart = attendance_chart.rename(
+                    columns={
+                        "month": "Month",
+                        "attendance_rate_pct": "Attendance rate (%)",
+                    }
+                )
+
+                attendance_chart["3-month rolling average (%)"] = (
+                    attendance_chart["Attendance rate (%)"]
+                    .rolling(window=3, min_periods=1)
+                    .mean()
+                )
+
+                attendance_chart["Month"] = (
+                    attendance_chart["Month"].astype(str)
+                )
                 st.line_chart(
                     attendance_chart,
-                    x="month",
+                    x="Month",
                     y=[
                         "Attendance rate (%)",
                         "3-month rolling average (%)",
@@ -1231,20 +1253,16 @@ elif page == "Task 6 - Attendance & Leave Trends":
                     y="late_arrivals",
                 )
 
+
+                                # Department attendance comparison
                 st.markdown("### Department attendance comparison")
+
                 dept_summary = (
                     filtered.groupby("department_id", as_index=False)
                     .agg(
                         scheduled_days=("scheduled_days", "sum"),
                         present_days=("present_days", "sum"),
-                        late_arrivals=("late_arrivals", "sum"),
                     )
-                )
-
-                dept_summary["department"] = (
-                    dept_summary["department_id"]
-                    .map(department_names)
-                    .fillna(dept_summary["department_id"])
                 )
 
                 dept_summary["attendance_rate_pct"] = (
@@ -1254,19 +1272,45 @@ elif page == "Task 6 - Attendance & Leave Trends":
                     )
                 )
 
-                dept_chart = dept_summary.rename(columns={
-                    "department": "Department",
-                    "attendance_rate_pct": "Attendance rate (%)",
-                })
+                dept_summary["department"] = (
+                    dept_summary["department_id"]
+                    .map(department_names)
+                    .fillna(dept_summary["department_id"])
+                )
+
+                dept_chart = dept_summary.rename(
+                    columns={
+                        "department": "Department",
+                        "attendance_rate_pct": "Attendance rate (%)",
+                    }
+                )
 
                 st.bar_chart(
                     dept_chart,
                     x="Department",
                     y="Attendance rate (%)",
-                    horizontal=True,
                 )
 
-                # -------------------------------------------------
+                st.dataframe(
+                    dept_summary[
+                        [
+                            "department",
+                            "scheduled_days",
+                            "present_days",
+                            "attendance_rate_pct",
+                        ]
+                    ].rename(
+                        columns={
+                            "department": "Department",
+                            "scheduled_days": "Scheduled days",
+                            "present_days": "Present days",
+                            "attendance_rate_pct": "Attendance rate (%)",
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+                               # -------------------------------------------------
                 # 7. Three objective unusual-month findings
                 # -------------------------------------------------
                 st.markdown("### Three unusual-month findings")
@@ -1274,6 +1318,7 @@ elif page == "Task 6 - Attendance & Leave Trends":
                 if len(valid) >= 2:
                     baseline = overall_rate
                     unusual = valid.copy()
+
                     unusual["deviation_pp"] = (
                         unusual["attendance_rate_pct"] - baseline
                     )
@@ -1288,7 +1333,9 @@ elif page == "Task 6 - Attendance & Leave Trends":
 
                     for _, row in unusual.iterrows():
                         direction = (
-                            "above" if row["deviation_pp"] > 0 else "below"
+                            "above"
+                            if row["deviation_pp"] > 0
+                            else "below"
                         )
                         st.write(
                             f"- **{row['month'].strftime('%B %Y')}**: "
@@ -1301,9 +1348,9 @@ elif page == "Task 6 - Attendance & Leave Trends":
                         )
 
                     st.caption(
-                        "Method: months are ranked by absolute deviation "
-                        "from the selected-period weighted attendance rate. "
-                        "This identifies unusual values, not their cause."
+                        "Months are ranked by absolute deviation from "
+                        "the selected-period weighted attendance rate. "
+                        "This identifies unusual values, not their causes."
                     )
                 else:
                     st.info(
@@ -1331,6 +1378,7 @@ elif page == "Task 6 - Attendance & Leave Trends":
                         f"{lowest['attendance_rate_pct']:.2f}%",
                         lowest["month"].strftime("%b %Y"),
                     )
+
                     insight_cols[1].metric(
                         "Highest attendance month",
                         f"{highest['attendance_rate_pct']:.2f}%",
@@ -1339,11 +1387,18 @@ elif page == "Task 6 - Attendance & Leave Trends":
 
                     late_rate = (
                         100 * total_late / total_scheduled
-                        if total_scheduled > 0 else 0
+                        if total_scheduled > 0
+                        else 0
                     )
+
                     insight_cols[2].metric(
                         "Late arrivals per 100 scheduled days",
                         f"{late_rate:.2f}",
+                    )
+                else:
+                    st.info(
+                        "No valid monthly records are available "
+                        "for numeric insights."
                     )
 
                 # -------------------------------------------------
@@ -1363,7 +1418,9 @@ elif page == "Task 6 - Attendance & Leave Trends":
                             y="overtime_hours",
                         )
                     else:
-                        st.info("No overtime records match this date range.")
+                        st.info(
+                            "No overtime records match this date range."
+                        )
 
                     st.caption(
                         "Overtime hours are summed from payroll records. "
@@ -1379,6 +1436,19 @@ elif page == "Task 6 - Attendance & Leave Trends":
                 st.markdown("### Leave days by type and status")
 
                 if not filtered_leave.empty:
+                    if "leave_days" not in filtered_leave.columns:
+                        if "days" in filtered_leave.columns:
+                            filtered_leave = filtered_leave.rename(
+                                columns={"days": "leave_days"}
+                            )
+                        else:
+                            st.error(
+                                "Leave data must contain 'days' "
+                                "or 'leave_days'."
+                            )
+                            filtered_leave = pd.DataFrame()
+
+                if not filtered_leave.empty:
                     leave_summary = (
                         filtered_leave.groupby(
                             ["leave_type", "status"],
@@ -1388,7 +1458,10 @@ elif page == "Task 6 - Attendance & Leave Trends":
                             leave_days=("leave_days", "sum"),
                             leave_requests=("leave_requests", "sum"),
                         )
-                        .sort_values("leave_days", ascending=False)
+                        .sort_values(
+                            "leave_days",
+                            ascending=False,
+                        )
                     )
 
                     st.bar_chart(
@@ -1397,6 +1470,7 @@ elif page == "Task 6 - Attendance & Leave Trends":
                         y="leave_days",
                         color="status",
                     )
+
                     st.dataframe(
                         leave_summary,
                         use_container_width=True,
@@ -1404,69 +1478,73 @@ elif page == "Task 6 - Attendance & Leave Trends":
                     )
 
                     approved = filtered_leave[
-                        filtered_leave["status"].str.lower() == "approved"
+                        filtered_leave["status"]
+                        .astype(str)
+                        .str.lower()
+                        .eq("approved")
                     ]
 
                     approved_days = (
                         approved["leave_days"].sum()
-                        if not approved.empty else 0
+                        if not approved.empty
+                        else 0
                     )
 
                     st.metric(
                         "Approved leave days in selected period",
                         f"{approved_days:,.1f}",
                     )
+
                     st.caption(
                         "Rejected and cancelled requests remain visible "
                         "in the detailed breakdown; they are not treated "
                         "as approved leave."
                     )
                 else:
-                    st.info("No leave records match the selected filters.")
+                    st.info(
+                        "No leave records match the selected filters."
+                    )
 
-                # -------------------------------------------------
-                # 11. Daily holiday/long-weekend context
+                                # -------------------------------------------------
+                # 11. Daily holiday and long-weekend context
                 # -------------------------------------------------
                 st.markdown("### Holiday and long-weekend context")
                 st.caption(
-                    "Synthetic/demo daily attendance sample only. "
-                    "Do not interpret this as complete historical attendance."
+                    "Synthetic/demo daily attendance sample only."
                 )
 
                 daily = warehouse_query("""
-                    
-SELECT
-    a.attendance_date,
-    a.department,
-    COUNT(*) AS employee_records,
-
-    SUM(
-        CASE
-            WHEN COALESCE(a.scheduled, 0) > 0
-            THEN 1 ELSE 0
-        END
-    ) AS scheduled_records,
-
-    SUM(
-        CASE
-            WHEN COALESCE(a.scheduled, 0) > 0
-             AND COALESCE(a.present, 0) > 0
-            THEN 1 ELSE 0
-        END
-    ) AS present_records,
-
-    SUM(
-        CASE
-            WHEN COALESCE(a.late_arrival, 0) > 0
-            THEN 1 ELSE 0
-        END
-    ) AS late_arrivals,
-
-    COALESCE(BOOL_OR(d.is_holiday), FALSE) AS is_holiday,
-    COALESCE(BOOL_OR(d.is_weekend), FALSE) AS is_weekend,
-    COALESCE(BOOL_OR(d.is_working_day), FALSE) AS is_working_day,
-    COALESCE(BOOL_OR(d.is_month_end), FALSE) AS is_month_end
-
+                    SELECT
+                        a.attendance_date,
+                        a.department,
+                        COUNT(*) AS employee_records,
+                        SUM(
+                            CASE
+                                WHEN COALESCE(a.scheduled, 0) > 0
+                                THEN 1 ELSE 0
+                            END
+                        ) AS scheduled_records,
+                        SUM(
+                            CASE
+                                WHEN COALESCE(a.scheduled, 0) > 0
+                                 AND COALESCE(a.present, 0) > 0
+                                THEN 1 ELSE 0
+                            END
+                        ) AS present_records,
+                        SUM(
+                            CASE
+                                WHEN COALESCE(a.late_arrival, 0) > 0
+                                THEN 1 ELSE 0
+                            END
+                        ) AS late_arrivals,
+                        COALESCE(BOOL_OR(d.is_holiday), FALSE)
+                            AS is_holiday,
+                        COALESCE(BOOL_OR(d.is_weekend), FALSE)
+                            AS is_weekend,
+                        COALESCE(BOOL_OR(d.is_working_day), FALSE)
+                            AS is_working_day,
+                        COALESCE(BOOL_OR(d.is_month_end), FALSE)
+                            AS is_month_end
                     FROM warehouse.demo_attendance_daily_sample a
                     LEFT JOIN warehouse.dim_date d
                         ON d.date = a.attendance_date
@@ -1474,29 +1552,52 @@ SELECT
                     ORDER BY a.attendance_date, a.department
                 """)
 
-                if not daily.empty:
+                if daily is not None and not daily.empty:
+                    daily = daily.copy()
+
                     daily["attendance_date"] = pd.to_datetime(
-                        daily["attendance_date"]
+                        daily["attendance_date"],
+                        errors="coerce",
                     )
 
+                    daily = daily.dropna(
+                        subset=["attendance_date"]
+                    ).copy()
+
                     daily = daily[
-                        daily["attendance_date"].between(start_ts, end_ts)
+                        daily["attendance_date"].between(
+                            start_ts, end_ts
+                        )
                     ].copy()
 
                     if selected_departments:
-                        # Daily sample stores department names, whereas
-                        # monthly records use department IDs.
                         selected_department_names = {
-                            department_names.get(d, d)
-                            for d in selected_departments
+                            department_names.get(dep, dep)
+                            for dep in selected_departments
                         }
                         daily = daily[
                             daily["department"].isin(
                                 selected_department_names
                             )
-                        ]
+                        ].copy()
 
                     if not daily.empty:
+                        for col in [
+                            "is_holiday",
+                            "is_weekend",
+                            "is_working_day",
+                            "is_month_end",
+                        ]:
+                            daily[col] = (
+                                daily[col]
+                                .fillna(False)
+                                .astype(bool)
+                            )
+
+                        daily["date_only"] = (
+                            daily["attendance_date"].dt.date
+                        )
+
                         daily["attendance_rate_pct"] = (
                             100 * daily["present_records"]
                             / daily["scheduled_records"].where(
@@ -1504,58 +1605,95 @@ SELECT
                             )
                         )
 
-                        # Flag holidays adjacent to weekends. This is
-                        # a simple context flag, not proof of a company
-                        # holiday policy or a continuous employee break.
-                        daily["date_only"] = (
-                            daily["attendance_date"].dt.normalize()
+                        calendar_days = (
+                            daily[
+                                [
+                                    "date_only",
+                                    "is_holiday",
+                                    "is_weekend",
+                                ]
+                            ]
+                            .drop_duplicates(
+                                subset=["date_only"]
+                            )
+                            .copy()
                         )
-                        holiday_dates = set(
-                            daily.loc[
-                                daily["is_holiday"], "date_only"
-                            ].tolist()
-                        )
+
+                        from datetime import timedelta
 
                         weekend_dates = set(
-                            daily.loc[
-                                daily["is_weekend"], "date_only"
-                            ].tolist()
+                            calendar_days.loc[
+                                calendar_days["is_weekend"],
+                                "date_only",
+                            ]
                         )
 
-                        daily["holiday_near_weekend"] = daily[
-                            "date_only"
-                        ].apply(
-                            lambda d: (
-                                bool(d in holiday_dates)
-                                and (
-                                    d - pd.Timedelta(days=1) in weekend_dates
-                                    or d + pd.Timedelta(days=1) in weekend_dates
-                                )
+                        calendar_days["holiday_near_weekend"] = (
+                            calendar_days.apply(
+                                lambda row: (
+                                    bool(row["is_holiday"])
+                                    and (
+                                        row["date_only"]
+                                        - timedelta(days=1)
+                                        in weekend_dates
+                                        or row["date_only"]
+                                        + timedelta(days=1)
+                                        in weekend_dates
+                                    )
+                                ),
+                                axis=1,
                             )
                         )
 
-                        daily["day_type"] = daily.apply(
-                            lambda r: (
-                                "Holiday near weekend"
-                                if r["holiday_near_weekend"]
-                                else "Holiday"
-                                if r["is_holiday"]
-                                else "Weekend"
-                                if r["is_weekend"]
-                                else "Working day"
-                                if r["is_working_day"]
-                                else "Other / unknown"
-                            ),
-                            axis=1,
+                        holiday_lookup = calendar_days.set_index(
+                            "date_only"
+                        )["holiday_near_weekend"]
+
+                        daily["holiday_near_weekend"] = (
+                            daily["date_only"]
+                            .map(holiday_lookup)
+                            .fillna(False)
+                            .astype(bool)
                         )
 
+                        daily["day_type"] = "Other / unknown"
+
+                        daily.loc[
+                            daily["is_working_day"],
+                            "day_type",
+                        ] = "Working day"
+
+                        daily.loc[
+                            daily["is_weekend"],
+                            "day_type",
+                        ] = "Weekend"
+
+                        daily.loc[
+                            daily["is_holiday"],
+                            "day_type",
+                        ] = "Holiday"
+
+                        daily.loc[
+                            daily["holiday_near_weekend"],
+                            "day_type",
+                        ] = "Holiday near weekend"
+
                         daily_context = (
-                            daily.groupby("day_type", as_index=False)
+                            daily.groupby(
+                                "day_type",
+                                as_index=False,
+                            )
                             .agg(
                                 dates=("date_only", "nunique"),
-                                scheduled_records=("scheduled_records", "sum"),
-                                present_records=("present_records", "sum"),
-                                late_arrivals=("late_arrivals", "sum"),
+                                scheduled_records=(
+                                    "scheduled_records", "sum"
+                                ),
+                                present_records=(
+                                    "present_records", "sum"
+                                ),
+                                late_arrivals=(
+                                    "late_arrivals", "sum"
+                                ),
                             )
                         )
 
@@ -1573,6 +1711,7 @@ SELECT
                         )
 
                         st.markdown("#### Daily sample detail")
+
                         st.dataframe(
                             daily[
                                 [
@@ -1583,6 +1722,8 @@ SELECT
                                     "present_records",
                                     "attendance_rate_pct",
                                     "late_arrivals",
+                                    "is_holiday",
+                                    "is_weekend",
                                     "is_month_end",
                                 ]
                             ].sort_values(
@@ -1599,10 +1740,6 @@ SELECT
                     st.info(
                         "The daily attendance demo sample is unavailable."
                     )
-
     except Exception as exc:
-        st.error(f"Task 6 dashboard could not load: {exc}")
-        st.caption(
-            "Check the warehouse connection and verify the source table "
-            "columns. Existing Tasks 1–5 are unchanged."
-        )
+        st.error("Task 6 - Attendance & Leave Trends could not be loaded.")
+        st.exception(exc)

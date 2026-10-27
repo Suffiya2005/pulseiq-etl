@@ -15,6 +15,7 @@ def main():
     columns = [
         "employee_key", "employee_id", "department_id", "role_id",
         "valid_from", "valid_to", "is_current", "change_reason",
+        "work_location", "work_mode",
     ]
     df = df[columns].copy()
 
@@ -48,9 +49,10 @@ def main():
                 """
                 INSERT INTO warehouse.dim_employee (
                     employee_key, employee_id, department_id, role_id,
-                    valid_from, valid_to, is_current, change_reason
+                    valid_from, valid_to, is_current, change_reason,
+                    work_location, work_mode
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (employee_key) DO UPDATE SET
                     employee_id = EXCLUDED.employee_id,
                     department_id = EXCLUDED.department_id,
@@ -58,7 +60,9 @@ def main():
                     valid_from = EXCLUDED.valid_from,
                     valid_to = EXCLUDED.valid_to,
                     is_current = EXCLUDED.is_current,
-                    change_reason = EXCLUDED.change_reason
+                    change_reason = EXCLUDED.change_reason,
+                    work_location = EXCLUDED.work_location,
+                    work_mode = EXCLUDED.work_mode
                 """,
                 rows,
             )

@@ -1,4 +1,4 @@
-"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
+﻿"""PulseIQ ETL pipeline for employees, payroll, attendance, and leave."""
 
 from __future__ import annotations
 
@@ -470,7 +470,20 @@ def clean_payroll(
         df["payroll_item_id"].duplicated(keep=False),
         "duplicate_payroll_item_id",
     )
-
+    synthetic_payroll = (
+    df["payroll_item_id"].astype(str).str.startswith("PI-X")
+)
+    duplicate_employee_month = df.duplicated(
+        subset=["employee_id", "period_end_date"],
+        keep=False,
+    )
+    add_reason(
+    reasons,
+    duplicate_employee_month
+    & ~synthetic_payroll
+    & ~df["payroll_item_id"].astype(str).str.startswith("PI-"),
+    "duplicate_employee_month_payroll",
+)
     for column in PAYROLL_NUMERIC_COLUMNS:
         if column in df.columns:
             add_reason(

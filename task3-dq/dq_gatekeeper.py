@@ -90,21 +90,19 @@ CHECKS = [
         "reason": "Every ledger entry must have equal debit and credit totals.",
     },
 {
-        "id": "DQ-C03",
-        "name": "Unique payroll rows",
-        "table": "fact_payroll",
-        "severity": "CRITICAL",
-        "sql": """
-            SELECT employee_id, period_end_date,
-                   COUNT(*) AS row_count,
-                   STRING_AGG(payroll_item_id, ', ') AS payroll_ids
-            FROM warehouse.fact_payroll
-            GROUP BY employee_id, period_end_date
-            HAVING COUNT(*) > 1
-        """,
-        "reason": "Duplicate employee-month payroll rows can overstate payroll  totals.",
-    },
-    
+
+    "id": "DQ-C03",
+    "name": "Unique payroll rows",
+    "table": "fact_payroll",
+    "severity": "CRITICAL",
+    "sql": """
+       SELECT employee_id, run_id, COUNT(*) AS row_count
+       FROM warehouse.fact_payroll
+       GROUP BY employee_id, run_id
+        HAVING COUNT(*) > 1
+  """,
+    "reason": "Duplicate employee-run payroll rows can overstate payroll totals.",
+},
 {
         "id": "DQ-C04",
         "name": "No orphan employees",
@@ -119,7 +117,7 @@ CHECKS = [
         "name": "No attendance after exit",
         "table": "fact_attendance_monthly",
         "severity": "WARNING",
-        
+
         "sql": """
             SELECT a.attendance_fact_id, a.employee_id,
                    a.period_end_date, a.employee_key
@@ -538,33 +536,42 @@ def run_checks():
                     )
 
                 elif check["id"] == "DQ-C14":
-                    metric_dict = pd.read_excel(
-                        WORKBOOK, sheet_name="metric_dictionary"
+                    from importlib.util import (
+                        module_from_spec,
+                        spec_from_file_location,
                     )
-                    raw_minimums = (
-                        metric_dict["minimum_group_size"]
-                        .dropna()
-                        .astype(str)
-                        .str.strip()
+
+                    helper_path = ROOT / "task3-dq" / "dq_c14_helpers.py"
+                    spec = spec_from_file_location(
+                        "dq_c14_helpers", helper_path
                     )
-                    minimums = raw_minimums.str.extract(
-                        r"^(\d+(?:\.\d+)?)",
-                        expand=False,
+
+                    if spec is None or spec.loader is None:
+                        raise ImportError(
+                            f"Cannot load C14 helper: {helper_path}"
+                        )
+
+                    helper = module_from_spec(spec)
+                    spec.loader.exec_module(helper)
+
+                    violations, checked_groups, limitations = (
+                        helper.validate_reporting_groups(WORKBOOK)
                     )
-                    numeric_minimums = pd.to_numeric(
-                        minimums, errors="coerce"
+
+                    bad_rows = len(violations)
+                    status = (
+                        "FAIL"
+                        if bad_rows > 0 or limitations
+                        else "PASS"
                     )
-                    invalid = (
-                        minimums.isna()
-                        | numeric_minimums.isna()
-                        | (numeric_minimums <= 0)
+
+                    details = (
+                        f"Checked {checked_groups} reporting groups. "
+                        f"Violations: {bad_rows}. "
+                        f"Coverage limitations: {len(limitations)}."
                     )
-                    bad_rows = int(invalid.sum())
-                    status = "PASS" if bad_rows == 0 else "FAIL"
-                    message = (
-                        f"Positive minimum group-size thresholds are defined "
-                        f"for {len(raw_minimums)} metrics; "
-                        f"{bad_rows} configured thresholds are invalid."
+                    message = "; ".join(
+                        [details] + violations[:20] + limitations[:10]
                     )
 
                 elif check["sql"] is not None:
