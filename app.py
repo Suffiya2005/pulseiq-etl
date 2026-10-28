@@ -35,6 +35,7 @@ page = st.sidebar.radio(
         "Task 5 - Workforce & Headcount",
         "Task 6 - Attendance & Leave Trends",
         "Task 7 - Attrition Analytics",
+        "Task 8 - Team Productivity",
     ],
 )
 
@@ -2109,4 +2110,243 @@ elif page == "Task 7 - Attrition Analytics":
                 )
     except Exception as exc:
         st.error("Task 7 - Attrition Analytics could not be loaded.")
+        st.exception(exc)
+
+elif page == "Task 8 - Team Productivity":
+    st.header("Task 8 - Team Productivity Dashboard")
+    st.caption("Team delivery across 16 teams and 38 sprints")
+
+    st.markdown("### Metric definitions and rules")
+    st.markdown(
+        """
+        - **Velocity:** Sum of story points for tasks with status `Done`,
+          grouped by team and sprint.
+        - **Cycle time:** Average recorded cycle time, in days, for `Done`
+          tasks with a valid cycle-time value.
+        - **On-time delivery:** Completed tasks marked `Y` divided by all
+          completed tasks with a `Y` or `N` on-time flag.
+        - **Blocked work:** Number of tasks whose current status is `Blocked`.
+        - **Reopened work:** Sum of `reopened_count`; also show the number
+          of tasks with at least one reopening.
+        - **Cancelled tasks:** Excluded from completion-rate denominators
+          and velocity. Report cancellation counts separately.
+        """
+    )
+
+    try:
+        with get_connection() as conn:
+            task_df = pd.read_sql_query(
+                """
+                SELECT
+                    record->>'task_id' AS task_id,
+                    record->>'team_id' AS team_id,
+                    record->>'sprint_id' AS sprint_id,
+                    record->>'status' AS status,
+                    record->>'task_type' AS task_type,
+                    NULLIF(record->>'story_points', '')::numeric
+                        AS story_points,
+                    NULLIF(record->>'cycle_time_days', '')::numeric
+                        AS cycle_time_days,
+                    NULLIF(record->>'completed_on_time', '')
+                        AS completed_on_time,
+                    COALESCE(
+                        NULLIF(record->>'reopened_count', '')::int, 0
+                    ) AS reopened_count,
+                    NULLIF(record->>'started_date', '')::date
+                        AS started_date,
+                    NULLIF(record->>'completed_date', '')::date
+                        AS completed_date
+                FROM dq_reference.fact_task
+                WHERE record->>'team_id' IS NOT NULL
+                  AND record->>'sprint_id' IS NOT NULL
+                """,
+                conn,
+            )
+
+        if task_df.empty:
+            st.warning("No task records were found.")
+        else:
+            task_df["story_points"] = pd.to_numeric(
+                task_df["story_points"], errors="coerce"
+            )
+            task_df["cycle_time_days"] = pd.to_numeric(
+                task_df["cycle_time_days"], errors="coerce"
+            )
+
+            teams = sorted(task_df["team_id"].dropna().unique())
+            sprints = sorted(
+                task_df["sprint_id"].dropna().unique(),
+                key=lambda value: int(value.split("-")[-1])
+                if value.split("-")[-1].isdigit()
+                else value,
+            )
+
+            st.subheader("Sprint selection")
+            selected_sprint = st.selectbox(
+                "Choose sprint",
+                sprints,
+                index=0,
+                key="task8_sprint_selector",
+            )
+
+            sprint_df = task_df[
+                task_df["sprint_id"] == selected_sprint
+            ].copy()
+
+            def summarize_team(group):
+                done = group[group["status"] == "Done"]
+                flagged = done[
+                    done["completed_on_time"].isin(["Y", "N"])
+                ]
+                return pd.Series(
+                    {
+                        "Tasks completed": len(done),
+                        "Velocity (points)": done["story_points"].sum(
+                            min_count=1
+                        ),
+                        "Average cycle time (days)": done[
+                            "cycle_time_days"
+                        ].mean(),
+                        "On-time tasks": (
+                            flagged["completed_on_time"] == "Y"
+                        ).sum(),
+                        "On-time rate (%)": (
+                            100
+                            * (
+                                flagged["completed_on_time"] == "Y"
+                            ).sum()
+                            / len(flagged)
+                            if len(flagged)
+                            else None
+                        ),
+                        "Blocked tasks": (
+                            group["status"] == "Blocked"
+                        ).sum(),
+                        "Cancelled tasks": (
+                            group["status"] == "Cancelled"
+                        ).sum(),
+                        "Reopened events": group[
+                            "reopened_count"
+                        ].sum(),
+                        "Tasks reopened": (
+                            group["reopened_count"] > 0
+                        ).sum(),
+                        "Planned non-cancelled tasks": (
+                            group["status"] != "Cancelled"
+                        ).sum(),
+                    }
+                )
+
+            team_summary = (
+                sprint_df.groupby("team_id", dropna=False)
+                .apply(summarize_team, include_groups=False)
+                .reset_index()
+            )
+
+            st.subheader(f"Team performance — {selected_sprint}")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric(
+                "Completed tasks",
+                f"{int(team_summary['Tasks completed'].sum()):,}",
+            )
+            c2.metric(
+                "Velocity points",
+                f"{team_summary['Velocity (points)'].sum():,.0f}",
+            )
+            c3.metric(
+                "Blocked tasks",
+                f"{int(team_summary['Blocked tasks'].sum()):,}",
+            )
+            c4.metric(
+                "Cancelled tasks",
+                f"{int(team_summary['Cancelled tasks'].sum()):,}",
+            )
+
+            chart_df = team_summary.set_index("team_id")
+            st.markdown("**Velocity by team**")
+            st.bar_chart(chart_df["Velocity (points)"])
+
+            st.markdown("**Average cycle time by team (days)**")
+            st.bar_chart(chart_df["Average cycle time (days)"])
+
+            st.markdown("**On-time delivery rate by team (%)**")
+            st.bar_chart(chart_df["On-time rate (%)"])
+
+            st.markdown("**Blocked and reopened work by team**")
+            st.bar_chart(
+                chart_df[
+                    [
+                        "Blocked tasks",
+                        "Reopened events",
+                    ]
+                ]
+            )
+
+            st.subheader("Team verification table")
+            st.dataframe(
+                team_summary.round(2),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.subheader("Hand verification — T01 and T02")
+            verify = team_summary[
+                team_summary["team_id"].isin(["T01", "T02"])
+            ]
+            st.dataframe(
+                verify.round(2),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.subheader("Team health findings")
+            if not team_summary.empty:
+                valid_velocity = team_summary.dropna(
+                    subset=["Velocity (points)"]
+                )
+                valid_ontime = team_summary.dropna(
+                    subset=["On-time rate (%)"]
+                )
+                valid_cycle = team_summary.dropna(
+                    subset=["Average cycle time (days)"]
+                )
+
+                if not valid_velocity.empty:
+                    best_velocity = valid_velocity.loc[
+                        valid_velocity["Velocity (points)"].idxmax()
+                    ]
+                    st.write(
+                        f"1. Highest velocity in {selected_sprint}: "
+                        f"{best_velocity['team_id']} delivered "
+                        f"{best_velocity['Velocity (points)']:.0f} points."
+                    )
+
+                if not valid_ontime.empty:
+                    best_ontime = valid_ontime.loc[
+                        valid_ontime["On-time rate (%)"].idxmax()
+                    ]
+                    st.write(
+                        f"2. Highest on-time rate in {selected_sprint}: "
+                        f"{best_ontime['team_id']} at "
+                        f"{best_ontime['On-time rate (%)']:.1f}%."
+                    )
+
+                if not valid_cycle.empty:
+                    fastest = valid_cycle.loc[
+                        valid_cycle["Average cycle time (days)"].idxmin()
+                    ]
+                    st.write(
+                        f"3. Lowest average cycle time in {selected_sprint}: "
+                        f"{fastest['team_id']} at "
+                        f"{fastest['Average cycle time (days)']:.2f} days."
+                    )
+
+            st.caption(
+                "Compare team size, task type, and sprint duration before "
+                "drawing conclusions. Velocity alone is not a measure of "
+                "team health. These findings describe the selected sprint."
+            )
+
+    except Exception as exc:
+        st.error("Task 8 - Team Productivity could not be loaded.")
         st.exception(exc)
