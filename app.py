@@ -37,6 +37,7 @@ page = st.sidebar.radio(
         "Task 7 - Attrition Analytics",
         "Task 8 - Team Productivity",
         "Task 9 - Payroll Cost & Reconciliation",
+        "Task 10 - Budget vs Actual & KPI Targets",
     ],
 )
 
@@ -2568,4 +2569,357 @@ elif page == "Task 9 - Payroll Cost & Reconciliation":
 
     except Exception as exc:
         st.error("Task 9 payroll dashboard could not be loaded.")
+        st.exception(exc)
+# ============================================================
+# TASK 10 — BUDGET VS ACTUAL & KPI TARGETS
+# ============================================================
+elif page == "Task 10 - Budget vs Actual & KPI Targets":
+    st.header("Task 10 — Budget vs Actual & KPI Targets")
+    st.caption(
+        "Variance = actual employer payroll cost − budget. "
+        "Positive variance means overspend; negative means underspend."
+    )
+
+    try:
+        budget = warehouse_query("""
+            SELECT
+                b.month,
+                b.department_id,
+                COALESCE(d.department_name, b.department_id) AS department,
+                b.budget_payroll_cost,
+                b.actual_payroll_cost,
+                b.variance_amount,
+                b.variance_pct,
+                b.employee_count
+            FROM warehouse.task10_budget_variance b
+            LEFT JOIN warehouse.dim_department d
+              ON d.department_id = b.department_id
+            ORDER BY b.month, b.department_id
+        """)
+
+        kpis = warehouse_query("""
+            SELECT
+                k.month,
+                k.department_id,
+                COALESCE(d.department_name, k.department_id) AS department,
+
+                k.attendance_rate_target,
+                k.attendance_actual,
+                k.attendance_status,
+
+                k.overtime_share_target_pct,
+                k.overtime_actual_pct,
+                k.overtime_status,
+
+                k.attrition_monthly_target_pct,
+                k.attrition_actual_pct,
+                k.attrition_status,
+
+                k.task_completion_target_pct,
+                k.task_completion_actual_pct,
+                k.task_completion_status
+            FROM warehouse.task10_kpi_status k
+            LEFT JOIN warehouse.dim_department d
+              ON d.department_id = k.department_id
+            ORDER BY k.month, k.department_id
+        """)
+
+        if budget.empty:
+            st.warning("No budget variance data is available.")
+        else:
+            budget["month"] = pd.to_datetime(budget["month"])
+            for col in [
+                "budget_payroll_cost", "actual_payroll_cost",
+                "variance_amount", "variance_pct", "employee_count"
+            ]:
+                budget[col] = pd.to_numeric(budget[col], errors="coerce")
+
+            st.subheader("Budget vs Actual")
+
+            departments = sorted(budget["department"].dropna().unique())
+            chosen_departments = st.multiselect(
+                "Filter departments",
+                options=departments,
+                default=departments,
+                key="task10_budget_departments",
+            )
+
+            available_months = sorted(budget["month"].dropna().unique())
+            if available_months:
+                month_range = st.date_input(
+                    "Filter month range",
+                    value=(
+                        available_months[0].date(),
+                        available_months[-1].date(),
+                    ),
+                    min_value=available_months[0].date(),
+                    max_value=available_months[-1].date(),
+                    key="task10_budget_month_range",
+                )
+            else:
+                month_range = ()
+
+            filtered = budget[
+                budget["department"].isin(chosen_departments)
+            ].copy()
+
+            if isinstance(month_range, (tuple, list)) and len(month_range) == 2:
+                start_month, end_month = month_range
+                filtered = filtered[
+                    (filtered["month"].dt.date >= start_month)
+                    & (filtered["month"].dt.date <= end_month)
+                ]
+
+            if filtered.empty:
+                st.info("No eligible department-month groups match these filters.")
+            else:
+                total_budget = filtered["budget_payroll_cost"].sum()
+                total_actual = filtered["actual_payroll_cost"].sum()
+                total_variance = total_actual - total_budget
+                total_variance_pct = (
+                    total_variance / total_budget * 100
+                    if total_budget else None
+                )
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Budget", f"₹{total_budget:,.0f}")
+                c2.metric("Actual", f"₹{total_actual:,.0f}")
+                c3.metric(
+                    "Net variance",
+                    f"₹{total_variance:,.0f}",
+                    delta=f"{total_variance_pct:.2f}%"
+                    if total_variance_pct is not None else "N/A",
+                    delta_color="inverse",
+                )
+                c4.metric(
+                    "Overspend department-months",
+                    int((filtered["variance_amount"] > 0).sum()),
+                )
+
+                st.caption(
+                    "Net variance aggregates all selected groups; positive and "
+                    "negative monthly variances can offset one another."
+                )
+
+                st.markdown("### Monthly budget and actual trend")
+                monthly = (
+                    filtered.groupby("month", as_index=False)[
+                        ["budget_payroll_cost", "actual_payroll_cost"]
+                    ].sum().sort_values("month")
+                )
+                chart = monthly.set_index("month").rename(columns={
+                    "budget_payroll_cost": "Budget",
+                    "actual_payroll_cost": "Actual",
+                })
+                st.line_chart(chart)
+
+                st.markdown("### Department-month variance")
+                variance_chart = filtered.copy()
+                variance_chart["month_label"] = (
+                    variance_chart["month"].dt.strftime("%Y-%m")
+                )
+                variance_chart["department_month"] = (
+                    variance_chart["month_label"]
+                    + " | "
+                    + variance_chart["department"].astype(str)
+                )
+                st.bar_chart(
+                    variance_chart.set_index("department_month")[
+                        ["variance_amount"]
+                    ].rename(columns={"variance_amount": "Variance (₹)"})
+                )
+
+                st.markdown("### Department overspend ranking")
+                ranking = (
+                    filtered.assign(
+                        positive_variance=filtered["variance_amount"].clip(lower=0)
+                    )
+                    .groupby("department", as_index=False)
+                    .agg(
+                        total_positive_variance=("positive_variance", "sum"),
+                        overspend_months=(
+                            "variance_amount",
+                            lambda values: int((values > 0).sum()),
+                        ),
+                        net_variance=("variance_amount", "sum"),
+                    )
+                    .sort_values("total_positive_variance", ascending=False)
+                )
+                st.dataframe(
+                    ranking.rename(columns={
+                        "department": "Department",
+                        "total_positive_variance": "Sum of positive monthly variances (₹)",
+                        "overspend_months": "Overspend months",
+                        "net_variance": "Net variance (₹)",
+                    }).round(2),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.caption(
+                    "Ranking sums positive monthly variances only. It is not the "
+                    "same as net variance and does not by itself prove waste or "
+                    "mismanagement."
+                )
+
+                st.markdown("### Department-month detail")
+                display = filtered.sort_values(
+                    ["month", "department"]
+                ).copy()
+                display["month"] = display["month"].dt.strftime("%Y-%m")
+                display = display.rename(columns={
+                    "month": "Month",
+                    "department": "Department",
+                    "budget_payroll_cost": "Budget (₹)",
+                    "actual_payroll_cost": "Actual (₹)",
+                    "variance_amount": "Variance (₹)",
+                    "variance_pct": "Variance (%)",
+                    "employee_count": "Employees",
+                })
+                st.dataframe(
+                    display[
+                        ["Month", "Department", "Budget (₹)", "Actual (₹)",
+                         "Variance (₹)", "Variance (%)", "Employees"]
+                    ].round(2),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.download_button(
+                    "Download filtered budget variance CSV",
+                    data=display.to_csv(index=False).encode("utf-8"),
+                    file_name="task10_budget_variance.csv",
+                    mime="text/csv",
+                )
+
+        st.divider()
+        st.subheader("KPI targets and traffic lights")
+
+        if kpis.empty:
+            st.warning("No KPI status data is available.")
+        else:
+            kpis["month"] = pd.to_datetime(kpis["month"])
+            kpi_departments = sorted(kpis["department"].dropna().unique())
+            selected_kpi_departments = st.multiselect(
+                "KPI departments",
+                options=kpi_departments,
+                default=kpi_departments,
+                key="task10_kpi_departments",
+            )
+            kpi_filtered = kpis[
+                kpis["department"].isin(selected_kpi_departments)
+            ].copy()
+
+            metric_options = {
+                "Attendance": (
+                    "attendance_actual",
+                    "attendance_rate_target",
+                    "attendance_status",
+                ),
+                "Overtime": (
+                    "overtime_actual_pct",
+                    "overtime_share_target_pct",
+                    "overtime_status",
+                ),
+                "Attrition": (
+                    "attrition_actual_pct",
+                    "attrition_monthly_target_pct",
+                    "attrition_status",
+                ),
+                "Task completion": (
+                    "task_completion_actual_pct",
+                    "task_completion_target_pct",
+                    "task_completion_status",
+                ),
+            }
+
+            metric_name = st.selectbox(
+                "Choose KPI",
+                list(metric_options.keys()),
+                key="task10_kpi_metric",
+            )
+            actual_col, target_col, status_col = metric_options[metric_name]
+
+            kpi_display = kpi_filtered[
+                ["month", "department", target_col, actual_col, status_col]
+            ].copy()
+            kpi_display["month"] = kpi_display["month"].dt.strftime("%Y-%m")
+            kpi_display = kpi_display.rename(columns={
+                "month": "Month",
+                "department": "Department",
+                target_col: "Target (%)",
+                actual_col: "Actual (%)",
+                status_col: "Status",
+            })
+
+            def traffic_light(status):
+                value = str(status).strip().upper()
+                if value == "GREEN":
+                    return "🟢 GREEN"
+                if value == "RED":
+                    return "🔴 RED"
+                return "⚪ N/A"
+
+            kpi_display["Status"] = kpi_display["Status"].map(traffic_light)
+            st.dataframe(
+                kpi_display,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.download_button(
+                "Download KPI status CSV",
+                data=kpi_display.to_csv(index=False).encode("utf-8"),
+                file_name="task10_kpi_status.csv",
+                mime="text/csv",
+            )
+
+            st.caption(
+                "Attendance is GREEN when actual meets or exceeds target. "
+                "Overtime, attrition and task completion use their configured "
+                "status rules. N/A means a target or actual value is unavailable. "
+                "No amber tolerance band was supplied."
+            )
+
+        st.divider()
+        st.subheader("Manual verification — three examples")
+        verification = pd.DataFrame([
+            {
+                "Month": "2025-04",
+                "Department": "D03",
+                "Budget (₹)": 7562000.00,
+                "Actual (₹)": 7461816.00,
+                "Variance (₹)": -100184.00,
+                "Variance (%)": -1.32,
+            },
+            {
+                "Month": "2025-10",
+                "Department": "D04",
+                "Budget (₹)": 5180000.00,
+                "Actual (₹)": 5044494.31,
+                "Variance (₹)": -135505.69,
+                "Variance (%)": -2.62,
+            },
+            {
+                "Month": "2026-06",
+                "Department": "D08",
+                "Budget (₹)": 2317000.00,
+                "Actual (₹)": 2357750.76,
+                "Variance (₹)": 40750.76,
+                "Variance (%)": 1.76,
+            },
+        ])
+        st.dataframe(verification, use_container_width=True, hide_index=True)
+
+        st.info(
+            "Interpretation note: budgets may not have been updated after the "
+            "hiring freeze. Treat variances as review signals, not proof of "
+            "avoidable spending. D00 has fewer than five employees and is "
+            "suppressed under the minimum-group-size rule; it must not be "
+            "interpreted as zero spending. Missing task-completion targets are "
+            "reported as N/A rather than assumed."
+        )
+
+    except Exception as exc:
+        st.error("Task 10 budget and KPI dashboard could not be loaded.")
         st.exception(exc)
