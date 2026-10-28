@@ -2014,10 +2014,17 @@ elif page == "Task 7 - Attrition Analytics":
                             tenure_order, fill_value=0
                         )
 
+                        tenure_chart_df = pd.DataFrame({
+                            "Tenure bucket": tenure_order,
+                            "Employees": [
+                                int(tenure_counts.get(bucket, 0))
+                                for bucket in tenure_order
+                            ],
+                        })
+
                         st.bar_chart(
-                            tenure_counts.rename_axis("Tenure at Exit").to_frame(
-                                name="Employees"
-                            )
+                            tenure_chart_df.set_index("Tenure bucket"),
+                            horizontal=True,
                         )
                         st.caption(
                             "Tenure is calculated from hire_date and exit_date "
