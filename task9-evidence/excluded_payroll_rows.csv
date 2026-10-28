@@ -1,0 +1,5 @@
+﻿payroll_item_id,issue,reference_record,report_treatment,reason
+PI-X0001,DUPLICATE_PAYROLL_ROW,PI-004059,Excluded from reconciliation totals,Duplicate employee and payroll run
+PI-X0002,DUPLICATE_PAYROLL_ROW,PI-000761,Excluded from reconciliation totals,Duplicate employee and payroll run
+PI-X0003,ORPHAN_FOREIGN_KEY,,Rejected by ETL,Employee dimension key is invalid
+PI-X0004,ORPHAN_FOREIGN_KEY,,Rejected by ETL,Employee dimension key is invalid
