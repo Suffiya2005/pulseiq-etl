@@ -2298,6 +2298,60 @@ elif page == "Task 8 - Team Productivity":
                 use_container_width=True,
                 hide_index=True,
             )
+            st.subheader("Task-type-adjusted comparison")
+            st.caption(
+                "Compare teams within the same task type. Story points, "
+                "cycle time, blocked tasks, and reopened events are shown "
+                "separately for Feature, Bug, Chore, and Spike work."
+            )
+
+            type_summary = (
+                sprint_df.groupby(
+                    ["team_id", "task_type"], dropna=False
+                )
+                .agg(
+                    total_tasks=("task_id", "count"),
+                    blocked_tasks=(
+                        "status",
+                        lambda s: (s == "Blocked").sum(),
+                    ),
+                    reopened_events=("reopened_count", "sum"),
+                )
+                .reset_index()
+            )
+
+            done_by_type = (
+                sprint_df[sprint_df["status"] == "Done"]
+                .groupby(["team_id", "task_type"], dropna=False)
+                .agg(
+                    completed_tasks=("task_id", "nunique"),
+                    velocity_points=("story_points", "sum"),
+                    avg_cycle_days=("cycle_time_days", "mean"),
+                )
+                .reset_index()
+            )
+
+            type_summary = type_summary.merge(
+                done_by_type,
+                on=["team_id", "task_type"],
+                how="left",
+            )
+
+            st.dataframe(
+                type_summary.round(2),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            st.info(
+                "Sprint-duration limitation: the task data contract "
+                "defines due_date as the sprint end date, and each of the "
+                "38 sprints has one distinct due date. An authoritative "
+                "sprint start date was not found, so exact sprint duration "
+                "and velocity-per-day are not calculated. Compare teams "
+                "within the same sprint and task type; account for team size "
+                "and workload before drawing health conclusions."
+            )
 
             st.subheader("Team health findings")
             if not team_summary.empty:
