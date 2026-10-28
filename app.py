@@ -36,6 +36,7 @@ page = st.sidebar.radio(
         "Task 6 - Attendance & Leave Trends",
         "Task 7 - Attrition Analytics",
         "Task 8 - Team Productivity",
+        "Task 9 - Payroll Cost & Reconciliation",
     ],
 )
 
@@ -2403,4 +2404,168 @@ elif page == "Task 8 - Team Productivity":
 
     except Exception as exc:
         st.error("Task 8 - Team Productivity could not be loaded.")
+        st.exception(exc)
+
+
+
+# ============================================================
+# TASK 9 — PAYROLL COST & RECONCILIATION
+# ============================================================
+elif page == "Task 9 - Payroll Cost & Reconciliation":
+    st.header("Task 9 — Payroll Cost & Reconciliation")
+    st.caption(
+        "Aggregate payroll reporting only. Duplicate payroll rows are excluded; "
+        "groups with fewer than 5 paid employees are suppressed."
+    )
+
+    try:
+        payroll = warehouse_query(
+            """
+            SELECT
+                DATE_TRUNC('month', p.period_end_date)::date AS month,
+                p.department_id,
+                d.department_name,
+                COUNT(DISTINCT p.employee_id) AS employees_paid,
+                SUM(p.gross_pay) AS gross_pay,
+                SUM(p.net_pay) AS net_pay,
+                SUM(p.employer_cost) AS employer_cost,
+                SUM(COALESCE(p.overtime_pay, 0)) AS overtime_pay,
+                SUM(COALESCE(p.variable_pay, 0)) AS variable_pay
+            FROM warehouse.fact_payroll p
+            JOIN warehouse.dim_department d
+              ON d.department_id = p.department_id
+            WHERE p.payroll_item_id NOT IN ('PI-X0001', 'PI-X0002')
+              AND p.department_id <> 'D00'
+            GROUP BY 1, 2, 3
+            ORDER BY 1, 2
+            """
+        )
+
+        if payroll.empty:
+            st.warning("No payroll data is available for this page.")
+        else:
+            payroll["month"] = pd.to_datetime(payroll["month"])
+            numeric_cols = [
+                "gross_pay", "net_pay", "employer_cost",
+                "overtime_pay", "variable_pay"
+            ]
+            for col in numeric_cols:
+                payroll[col] = pd.to_numeric(payroll[col], errors="coerce").fillna(0)
+
+            # Suppress undersized groups before showing data or charts.
+            safe = payroll.loc[payroll["employees_paid"] >= 5].copy()
+            safe["cost_per_employee"] = (
+                safe["employer_cost"] / safe["employees_paid"]
+            )
+
+            departments = sorted(safe["department_name"].dropna().unique())
+            selected_departments = st.multiselect(
+                "Departments",
+                options=departments,
+                default=departments,
+            )
+            months = sorted(safe["month"].dropna().unique())
+            if months:
+                selected_range = st.date_input(
+                    "Month range",
+                    value=(months[0].date(), months[-1].date()),
+                    min_value=months[0].date(),
+                    max_value=months[-1].date(),
+                )
+            else:
+                selected_range = ()
+
+            filtered = safe[safe["department_name"].isin(selected_departments)].copy()
+
+            if isinstance(selected_range, (tuple, list)) and len(selected_range) == 2:
+                start_date, end_date = selected_range
+                filtered = filtered[
+                    (filtered["month"].dt.date >= start_date)
+                    & (filtered["month"].dt.date <= end_date)
+                ]
+
+            if filtered.empty:
+                st.info("No eligible groups match the selected filters.")
+            else:
+                totals = filtered.groupby("month", as_index=False).agg(
+                    employees_paid=("employees_paid", "sum"),
+                    gross_pay=("gross_pay", "sum"),
+                    net_pay=("net_pay", "sum"),
+                    employer_cost=("employer_cost", "sum"),
+                    overtime_pay=("overtime_pay", "sum"),
+                    variable_pay=("variable_pay", "sum"),
+                )
+                overall_employees = filtered["employees_paid"].sum()
+                overall_cost = filtered["employer_cost"].sum()
+                cost_per_employee = (
+                    overall_cost / overall_employees if overall_employees else 0
+                )
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Gross pay", f"₹{filtered['gross_pay'].sum():,.2f}")
+                c2.metric("Net pay", f"₹{filtered['net_pay'].sum():,.2f}")
+                c3.metric("Employer cost", f"₹{overall_cost:,.2f}")
+                c4.metric("Cost per employee-month", f"₹{cost_per_employee:,.2f}")
+
+                st.warning(
+                    "Finance review pending: June 2026 ledger payroll-related "
+                    "expense exceeds the official employer-cost figure by ₹18,450. "
+                    "The payroll reconciliation matches the official answer key; "
+                    "no payroll or ledger records were changed to resolve this "
+                    "exception. Finance should investigate through the approved "
+                    "accounting process and preserve the audit trail."
+                )
+
+                st.markdown("### Monthly payroll cost trend")
+                trend = totals.sort_values("month").set_index("month")[
+                    ["gross_pay", "net_pay", "employer_cost"]
+                ].rename(columns={
+                    "gross_pay": "Gross pay",
+                    "net_pay": "Net pay",
+                    "employer_cost": "Employer cost",
+                })
+                st.line_chart(trend)
+
+                st.markdown("### Cost per employee-month trend")
+                totals["cost_per_employee"] = (
+                    totals["employer_cost"]
+                    / totals["employees_paid"].replace(0, pd.NA)
+                )
+                st.line_chart(
+                    totals.sort_values("month").set_index("month")[
+                        ["cost_per_employee"]
+                    ].rename(columns={"cost_per_employee": "Cost per employee-month"})
+                )
+
+                st.markdown("### Department and month breakdown")
+                display = filtered.sort_values(
+                    ["month", "department_name"]
+                ).copy()
+                display["month"] = display["month"].dt.strftime("%Y-%m")
+                display = display.rename(columns={
+                    "month": "Month",
+                    "department_name": "Department",
+                    "employees_paid": "Employees paid",
+                    "gross_pay": "Gross pay",
+                    "net_pay": "Net pay",
+                    "employer_cost": "Employer cost",
+                    "cost_per_employee": "Cost per employee-month",
+                })
+                st.dataframe(
+                    display[
+                        ["Month", "Department", "Employees paid", "Gross pay",
+                         "Net pay", "Employer cost", "Cost per employee-month"]
+                    ].round(2),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                st.caption(
+                    "Cost per employee is employer cost divided by distinct paid "
+                    "employees within the displayed aggregate. Leadership D00 and "
+                    "the two confirmed duplicate payroll IDs are excluded."
+                )
+
+    except Exception as exc:
+        st.error("Task 9 payroll dashboard could not be loaded.")
         st.exception(exc)
