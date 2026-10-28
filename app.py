@@ -109,98 +109,74 @@ def numeric_column(frame, column):
 if page == "Overview":
     st.subheader("Project Overview")
     st.write(
-        "Explore the PulseIQ ETL pipeline, analytics warehouse, "
-        "headcount dashboard, and attendance analysis."
+        "Explore all ten PulseIQ tasks, from ETL and the analytics warehouse "
+        "to workforce, productivity, payroll and KPI insights."
     )
 
-    col1, col2 = st.columns(2)
+    overview_tasks = [
+        ("Task 1 ? ETL Pipeline",
+         "Clean and validate source data, preview cleaned files, and review rejected records.",
+         ["Clean CSV datasets", "Validation and rejected-record review"],
+         "Task 1 - ETL"),
+        ("Task 2 ? Analytics Warehouse",
+         "Explore PostgreSQL dimensions, fact tables, and business metrics.",
+         ["Payroll records", "Warehouse tables and business metrics"],
+         "Task 2 - Warehouse"),
+        ("Task 3 ? Analytics Dashboard",
+         "Explore headcount trends, departments, role mix, joiners, leavers, and tenure.",
+         ["Headcount trends", "Department and role analysis"],
+         "Task 3 - Analytics"),
+        ("Task 4 ? Attendance Trends Analysis",
+         "Analyze attendance, leave patterns, late arrivals, and anomalies.",
+         ["Monthly trends", "Department comparisons", "Leave and anomaly analysis"],
+         "Task 4 - Attendance Trends Analysis"),
+        ("Task 5 ? Workforce & Headcount",
+         "Review workforce size, composition, and headcount changes.",
+         ["Workforce overview", "Department and role mix", "Joiner and leaver trends"],
+         "Task 5 - Workforce & Headcount"),
+        ("Task 6 ? Attendance & Leave Trends",
+         "Compare attendance and leave trends across months and departments.",
+         ["Attendance and leave metrics", "Monthly trends", "Unusual-month analysis"],
+         "Task 6 - Attendance & Leave Trends"),
+        ("Task 7 ? Attrition Analytics",
+         "Review employee attrition patterns and available prediction outputs.",
+         ["Actual versus predicted attrition", "Tenure analysis", "Privacy safeguards"],
+         "Task 7 - Attrition Analytics"),
+        ("Task 8 ? Team Productivity",
+         "Explore team delivery and productivity across selected sprints.",
+         ["Sprint and team comparisons", "Blocked and reopened work", "Verification metrics"],
+         "Task 8 - Team Productivity"),
+        ("Task 9 ? Payroll Cost & Reconciliation",
+         "Review payroll cost trends and reconciliation exceptions.",
+         ["Gross and net pay", "Employer cost", "Reconciliation review"],
+         "Task 9 - Payroll Cost & Reconciliation"),
+        ("Task 10 ? Budget vs Actual & KPI Targets",
+         "Compare departmental payroll budgets with actuals and monitor KPI targets.",
+         ["Budget variance and overspend ranking", "KPI traffic lights", "Manual verification"],
+         "Task 10 - Budget vs Actual & KPI Targets"),
+    ]
 
-    with col1:
-        st.markdown("### Task 1 — ETL Pipeline")
-        st.write(
-            "Clean and validate data, preview cleaned files, "
-            "and review rejected records."
-        )
+    for i in range(0, len(overview_tasks), 2):
+        columns = st.columns(2)
+        for column, task in zip(columns, overview_tasks[i:i + 2]):
+            title, description, features, page_name = task
+            with column:
+                with st.container(border=True):
+                    st.markdown(f"### {title}")
+                    st.write(description)
+                    for feature in features:
+                        st.markdown(f"- {feature}")
+                    st.caption(f"Open from sidebar: {page_name}")
 
-        clean_files = (
-            list(CLEAN_DIR.glob("*.csv"))
-            if CLEAN_DIR.exists()
-            else []
-        )
-
-        st.metric("Clean CSV datasets", len(clean_files))
-
-    with col2:
-        st.markdown("### Task 2 — Analytics Warehouse")
-        st.write(
-            "Explore PostgreSQL dimensions, fact tables, "
-            "and business metrics."
-        )
-
-        try:
-            result = warehouse_query(
-                "SELECT COUNT(*) AS total "
-                "FROM warehouse.fact_payroll"
-            )
-            st.metric(
-                "Payroll records",
-                f"{int(result.iloc[0]['total']):,}",
-            )
-            st.success("PostgreSQL connection successful")
-
-        except Exception:
-            st.warning(
-                "Warehouse unavailable. Check Docker PostgreSQL "
-                "and WAREHOUSE_* settings."
-            )
-
-    col3, col4 = st.columns(2)
-
-    with col3:
-        st.markdown("### Task 3 — Analytics Dashboard")
-        st.write(
-            "Explore headcount trends, departments, role mix, "
-            "joiners, leavers, and tenure."
-        )
-        st.link_button(
-            "Open Superset",
-            "http://localhost:8088",
-        )
-
-    with col4:
-        st.markdown("### Task 4 — Attendance Trends Analysis")
-        st.write(
-            "Analyze attendance and leave patterns, compare departments, "
-            "and review trends, late arrivals, and AI/ML anomalies."
-        )
-        st.markdown(
-            "- Monthly attendance trend and 3-month rolling average\n"
-            "- Department-wise attendance comparison\n"
-            "- Leave days by type\n"
-            "- Monthly late-arrival trend\n"
-            "- AI/ML anomaly chart\n"
-            "- Weekday attendance trend (synthetic demo only)"
-        )
-        st.info(
-            "Select Task 4 - Attendance Trends Analysis in the sidebar "
-            "to open the detailed dashboard."
-        )
     if SUMMARY_PATH.exists():
         st.subheader("Latest ETL Run")
-
         try:
             st.json(
-                json.loads(
-                    SUMMARY_PATH.read_text(encoding="utf-8")
-                )
+                json.loads(SUMMARY_PATH.read_text(encoding="utf-8"))
             )
         except (json.JSONDecodeError, OSError):
             st.warning("Could not read the ETL run summary.")
 
-
-# ============================================================
-# TASK 1 — ETL
-# ============================================================
 
 elif page == "Task 1 - ETL":
     st.subheader("ETL Pipeline Dashboard")
