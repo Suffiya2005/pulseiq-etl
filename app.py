@@ -1906,14 +1906,142 @@ elif page == "Task 7 - Attrition Analytics":
             )
 
             st.subheader("3. Tenure at Exit")
-            st.info(
-                "Not displayed yet: the currently verified monthly facts do "
-                "not contain employee hire dates and individual exit dates. "
-                "We will add tenure buckets only after confirming a suitable "
-                "source table."
+
+            from pathlib import Path
+
+            employees_path = (
+                Path(__file__).resolve().parent
+                / "data"
+                / "clean"
+                / "employees.parquet"
             )
 
+            if employees_path.exists():
+                tenure_df = pd.read_parquet(employees_path)
+
+                required_columns = {
+                    "employee_id",
+                    "hire_date",
+                    "exit_date",
+                }
+
+                if required_columns.issubset(tenure_df.columns):
+                    tenure_df["hire_date"] = pd.to_datetime(
+                        tenure_df["hire_date"], errors="coerce"
+                    )
+                    tenure_df["exit_date"] = pd.to_datetime(
+                        tenure_df["exit_date"], errors="coerce"
+                    )
+
+                    tenure_df = tenure_df.dropna(
+                        subset=["employee_id", "hire_date", "exit_date"]
+                    ).copy()
+
+                    # Deduplicate employee history records.
+                    tenure_df = tenure_df.drop_duplicates(
+                        subset=["employee_id", "hire_date", "exit_date"]
+                    )
+
+                    date_counts = tenure_df.groupby("employee_id").agg(
+                        hire_dates=("hire_date", "nunique"),
+                        exit_dates=("exit_date", "nunique"),
+                    )
+
+                    consistent_ids = date_counts[
+                        (date_counts["hire_dates"] == 1)
+                        & (date_counts["exit_dates"] == 1)
+                    ].index
+
+                    tenure_df = tenure_df[
+                        tenure_df["employee_id"].isin(consistent_ids)
+                    ].drop_duplicates(subset=["employee_id"])
+
+                    tenure_df["tenure_days_calculated"] = (
+                        tenure_df["exit_date"] - tenure_df["hire_date"]
+                    ).dt.days
+
+                    tenure_df = tenure_df[
+                        tenure_df["tenure_days_calculated"] >= 0
+                    ].copy()
+
+                    if not tenure_df.empty:
+                        tenure_df["tenure_years_calculated"] = (
+                            tenure_df["tenure_days_calculated"] / 365.25
+                        )
+
+                        labels = [
+                            "Under 1 year",
+                            "1–2 years",
+                            "2–5 years",
+                            "5–10 years",
+                            "10+ years",
+                        ]
+
+                        tenure_df["tenure_bucket"] = pd.cut(
+                            tenure_df["tenure_years_calculated"],
+                            bins=[-0.001, 1, 2, 5, 10, float("inf")],
+                            labels=labels,
+                            right=False,
+                        )
+
+                        tenure_counts = (
+                            tenure_df["tenure_bucket"]
+                            .value_counts(sort=False)
+                            .reindex(labels, fill_value=0)
+                        )
+
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric(
+                            "Unique exited employees", f"{len(tenure_df):,}"
+                        )
+                        col2.metric(
+                            "Average tenure",
+                            f"{tenure_df['tenure_years_calculated'].mean():.2f} years",
+                        )
+                        col3.metric(
+                            "Median tenure",
+                            f"{tenure_df['tenure_years_calculated'].median():.2f} years",
+                        )
+                        tenure_order = [
+                            "Under 1 year",
+                            "1–2 years",
+                            "2–5 years",
+                            "5–10 years",
+                            "10+ years",
+                        ]
+
+                        tenure_counts = tenure_counts.reindex(
+                            tenure_order, fill_value=0
+                        )
+
+                        st.bar_chart(
+                            tenure_counts.rename_axis("Tenure at Exit").to_frame(
+                                name="Employees"
+                            )
+                        )
+                        st.caption(
+                            "Tenure is calculated from hire_date and exit_date "
+                            "in the clean employee dataset. Employee history "
+                            "rows are deduplicated. This dataset may have a "
+                            "different reporting scope from monthly warehouse "
+                            "exit metrics."
+                        )
+                    else:
+                        st.info(
+                            "No valid employee exit records are available."
+                        )
+                else:
+                    st.warning(
+                        "Required columns are missing: employee_id, "
+                        "hire_date, or exit_date."
+                    )
+            else:
+                st.warning(
+                    "The clean employees.parquet file was not found."
+                )
+
             st.subheader("4. Predicted, not certain")
+
             st.warning(
                 "These are model estimates, not confirmed departures. "
                 "Risk scores must not be treated as proof of an employee's "
