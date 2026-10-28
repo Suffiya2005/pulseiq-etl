@@ -1,4 +1,4 @@
-﻿# Task 9 — Payroll Reconciliation and Exceptions
+# Task 9 — Payroll Reconciliation and Exceptions
 
 ## Payroll reconciliation
 - Official answer-key months: 18
