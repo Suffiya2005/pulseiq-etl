@@ -32,14 +32,14 @@ The journal entry balances overall, but the payroll expense reconciliation remai
 
 ## 4. Finance Decision Record
 
-- Reviewer / approver: Pending
-- Review date: Pending
-- Decision: Pending
-- Reason / justification: Pending
-- Supporting evidence reference: Pending
-- Approval reference: Pending
-- Reconciliation rerun result: Pending
-- Closure date: Pending
+- Reviewer / approver: To be designated by Finance
+- Review date: To be recorded upon review
+- Decision: Awaiting authorized decision
+- Reason / justification: To be documented by the reviewer
+- Supporting evidence reference: JE-002094, PR-2026-06, JL-005614
+- Approval reference: To be recorded when authorization is issued
+- Reconciliation rerun result: To be recorded after authorized disposition
+- Closure date: To be recorded after closure criteria are satisfied
 
 ## 5. Closure Checklist
 
