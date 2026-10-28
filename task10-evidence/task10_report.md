@@ -87,11 +87,35 @@ Detailed evidence: `kpi_status.csv` and `kpi_status_summary.csv`
 
 The 12 attrition N/A rows are explained by the metric view's privacy eligibility rule: it includes only months with starting headcount >= 10. D10 has 18 source months; 6 meet the threshold and 12 have starting headcount below 10. These are expected privacy suppressions, not missing source records. Keep them N/A and do not infer a zero attrition rate.
 
-## 8. Task-completion KPI limitation
+## 8. Task-completion KPI — completed aggregation and validation
 
-The supplied task-completion target could not be evaluated at department-month level using the available metric. The existing task-completion metric is at team/sprint grain, while the target table is department/month grain. The task-completion actual and traffic-light status are therefore N/A in this view rather than being inferred or incorrectly joined.
+The task-completion KPI is now evaluated at department/month grain using an effective-dated employee-to-department mapping.
 
-To complete this KPI, define an approved aggregation from team/sprint to department/month, verify the mapping, and then compare the aggregated actual with the target.
+**Methodology**
+- Cohort: tasks created during each calendar month.
+- Department assignment: the assignee's department on the task's creation date, using `warehouse.dim_employee` effective dates.
+- Numerator: tasks with status `Done`.
+- Denominator: all tasks except those with status `Cancelled`.
+- Actual completion rate: Done tasks / non-cancelled tasks × 100.
+- Target: `task_completion_target_pct` from `warehouse.kpi_targets` (80% where populated).
+- Variance: actual completion rate minus target, in percentage points.
+- Traffic light: GREEN when actual meets or exceeds target; RED when below target; N/A when the target or eligible actual is unavailable.
+- No department is assigned to a task without a valid effective-dated employee match.
+
+**Validation results**
+- 180 department-month rows and 180 unique department-month keys.
+- GREEN: 135; RED: 27; N/A: 18.
+- Zero invalid GREEN, RED, or N/A classifications.
+- Zero overlapping employee-history pairs in the dimension-history check.
+- 28,868 source task rows with 28,868 distinct task IDs.
+
+**Limitations and interpretation**
+- 313 tasks were created before the beginning of their assignees' recorded employee history and therefore have no valid department mapping. They are excluded from department-level aggregation rather than assigned to a guessed department.
+- The 18 D10 target rows are NULL and remain N/A; no suppressed target or rate is inferred.
+- This is a created-task cohort completion rate based on current task status, not a measure of tasks completed during the month. Eight tasks marked Done have no completion date; the cohort calculation uses status and creation date, so it does not require a completion date.
+- The result is suitable for comparison with the supplied department/month targets, subject to these mapping and privacy limitations.
+
+Evidence: `task_completion_monthly.csv` and `task10_task_completion_validation.png`.
 
 ## 9. Fairness and interpretation
 
@@ -108,9 +132,6 @@ Privacy-suppressed departmental values must not be reconstructed or disclosed th
 - [x] Department overspend ranking exported
 - [x] KPI status and summary exported
 - [x] KPI traffic-light rules independently validated across 180 rows; zero mismatches
-- [ ] Task-completion KPI aggregation resolved
-- [ ] Evidence screenshot captured
+- [x] Task-completion KPI aggregation implemented and validated; limitations documented
+- [x] Evidence screenshot captured
 - [ ] Final review and commit completed
-
-
-
