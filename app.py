@@ -40,6 +40,7 @@ page = st.sidebar.radio(
         "Task 10 - Budget vs Actual & KPI Targets",
         "Task 11 - Profit & Loss Analytics",
         "Task 12 - Invoices, Receivables & Cash Flow",
+        "Task 13 - Cross-Department Impact",
     ],
 )
 
@@ -3665,6 +3666,194 @@ elif page == "Task 12 - Invoices, Receivables & Cash Flow":
     except Exception as exc:
         st.error(
             "Task 12 Invoices & Cash Flow dashboard "
+            "could not be loaded."
+        )
+        st.exception(exc)
+
+        
+# --------------------------------------------
+# TASK 13 - CROSS-DEPARTMENT IMPACT
+# --------------------------------------------
+elif page == "Task 13 - Cross-Department Impact":
+
+    st.header("Task 13 - Cross-Department Impact")
+    st.caption(
+        "Department-wise monthly comparison of "
+        "headcount, payroll, attendance, leave and attrition."
+    )
+
+    try:
+        conn = get_connection()
+
+        cross_df = pd.read_sql(
+            """
+            SELECT *
+            FROM warehouse.task13_cross_department_impact
+            ORDER BY month, department_id
+            """,
+            conn
+        )
+
+        comparison_df = pd.read_sql(
+            """
+            SELECT *
+            FROM warehouse.task13_department_comparison
+            ORDER BY total_employer_cost DESC
+            """,
+            conn
+        )
+
+        conn.close()
+
+        if cross_df.empty:
+            st.warning("No Task 13 data available.")
+        else:
+            st.subheader("Monthly Department Filters")
+
+            departments = sorted(
+                cross_df["department_id"].dropna().unique()
+            )
+
+            selected_departments = st.multiselect(
+                "Select Departments",
+                departments,
+                default=departments
+            )
+
+            filtered_df = cross_df[
+                cross_df["department_id"].isin(
+                    selected_departments
+                )
+            ].copy()
+
+            # --------------------------------------------
+            # KPI SUMMARY
+            # --------------------------------------------
+            st.subheader("Cross-Department KPIs")
+
+            total_cost = filtered_df[
+                "employer_cost"
+            ].sum()
+
+            total_overtime = filtered_df[
+                "overtime_cost"
+            ].sum()
+
+            total_leave = filtered_df[
+                "approved_leave_days"
+            ].sum()
+
+            avg_attrition = filtered_df[
+                "attrition_rate_pct"
+            ].mean()
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            col1.metric(
+                "Total Employer Cost",
+                f"₹{total_cost:,.0f}"
+            )
+
+            col2.metric(
+                "Total Overtime Cost",
+                f"₹{total_overtime:,.0f}"
+            )
+
+            col3.metric(
+                "Approved Leave Days",
+                f"{total_leave:,.0f}"
+            )
+
+            col4.metric(
+                "Average Attrition",
+                f"{avg_attrition:.2f}%"
+            )
+
+            # --------------------------------------------
+            # MONTHLY DEPARTMENT TABLE
+            # --------------------------------------------
+            st.subheader("Department-Month Impact Table")
+
+            st.dataframe(
+                filtered_df,
+                use_container_width=True,
+                hide_index=True
+            )
+
+            # --------------------------------------------
+            # DEPARTMENT COMPARISON
+            # --------------------------------------------
+            st.subheader(
+                "Department Comparison: Cost, Overtime & Attrition"
+            )
+
+            if not comparison_df.empty:
+
+                chart_df = comparison_df.copy()
+
+                st.bar_chart(
+                    chart_df.set_index("department_id")[
+                        [
+                            "total_employer_cost",
+                            "total_overtime_cost"
+                        ]
+                    ]
+                )
+
+                st.line_chart(
+                    chart_df.set_index("department_id")[
+                        ["avg_monthly_attrition_rate_pct"]
+                    ]
+                )
+
+                st.dataframe(
+                    chart_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+            # --------------------------------------------
+            # DATA QUALITY NOTES
+            # --------------------------------------------
+            st.subheader("Data Quality & Reconciliation Notes")
+
+            st.info(
+                "Attendance department attribution was recovered "
+                "using employee dimension records. 85 attendance "
+                "records could not be matched to a department."
+            )
+
+            st.warning(
+                "Small overtime differences exist between "
+                "attendance and payroll source totals. "
+                "These are retained as reconciliation variances."
+            )
+
+            st.info(
+                "Seven departments have zero recorded paid "
+                "overtime in payroll. This does not necessarily "
+                "mean no overtime was worked."
+            )
+
+            st.warning(
+                "Correlation between overtime and attrition "
+                "does not establish causation."
+            )
+
+            st.warning(
+                "Official reference reconciliation is pending "
+                "because the 04_Validation_Vault and "
+                "reference_summary_dept_month file have not "
+                "yet been provided."
+            )
+
+            st.success(
+                "Task 13 Cross-Department Impact loaded successfully."
+            )
+
+    except Exception as exc:
+        st.error(
+            "Task 13 Cross-Department Impact dashboard "
             "could not be loaded."
         )
         st.exception(exc)
