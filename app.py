@@ -39,6 +39,7 @@ page = st.sidebar.radio(
         "Task 9 - Payroll Cost & Reconciliation",
         "Task 10 - Budget vs Actual & KPI Targets",
         "Task 11 - Profit & Loss Analytics",
+        "Task 12 - Invoices, Receivables & Cash Flow",
     ],
 )
 
@@ -3473,5 +3474,197 @@ elif page == "Task 11 - Profit & Loss Analytics":
         st.error(
             "Task 11 Profit & Loss dashboard could not be loaded."
         )
+        st.exception(exc)
 
+
+
+# ============================================================
+# TASK 12 — INVOICES, RECEIVABLES & CASH FLOW
+# ============================================================
+elif page == "Task 12 - Invoices, Receivables & Cash Flow":
+
+    st.header("Task 12 - Invoices, Receivables & Cash Flow")
+    st.caption(
+        "Receivables ageing | Client payment behaviour | "
+        "Monthly cash inflow vs outflow"
+    )
+
+    try:
+        conn = get_connection()
+
+        # --------------------------------------------
+        # 1. OPEN RECEIVABLES
+        # --------------------------------------------
+        open_invoices = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_open_invoices",
+            conn
+        )
+
+        ageing = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_receivables_ageing",
+            conn
+        )
+
+        ageing_summary = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_ageing_summary",
+            conn
+        )
+
+        client_outstanding = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_client_outstanding",
+            conn
+        )
+
+        avg_days = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_avg_days_to_pay",
+            conn
+        )
+
+        cash_flow = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_monthly_cash_flow",
+            conn
+        )
+
+        reconciliation = pd.read_sql_query(
+            "SELECT * FROM warehouse.task12_receivables_reconciliation",
+            conn
+        )
+
+        # --------------------------------------------
+        # 2. KPI SUMMARY
+        # --------------------------------------------
+        total_receivables = (
+            open_invoices["balance_due"].sum()
+            if "balance_due" in open_invoices.columns
+            else 0
+        )
+
+        open_count = len(open_invoices)
+
+        overdue_amount = (
+            ageing_summary["outstanding_amount"].sum()
+            if "outstanding_amount" in ageing_summary.columns
+            else 0
+        )
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric(
+            "Open Invoices",
+            f"{open_count:,}"
+        )
+
+        c2.metric(
+            "Open Receivables",
+            f"₹{total_receivables:,.2f}"
+        )
+
+        c3.metric(
+            "Ageing Amount",
+            f"₹{overdue_amount:,.2f}"
+        )
+
+        st.divider()
+
+        # --------------------------------------------
+        # 3. RECEIVABLES AGEING
+        # --------------------------------------------
+        st.subheader("Receivables Ageing")
+
+        st.write(
+            "Outstanding invoices grouped into "
+            "0–30, 31–60, 61–90 and 90+ day buckets."
+        )
+
+        st.dataframe(
+            ageing_summary,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if not ageing_summary.empty:
+            st.bar_chart(
+                ageing_summary.set_index("ageing_bucket")[
+                    "outstanding_amount"
+                ]
+            )
+
+        # --------------------------------------------
+        # 4. CLIENTS WITH HIGHEST OUTSTANDING
+        # --------------------------------------------
+        st.subheader("Clients with Highest Outstanding Amount")
+
+        st.dataframe(
+            client_outstanding,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if (
+            not client_outstanding.empty
+            and "outstanding_amount" in client_outstanding.columns
+        ):
+            st.bar_chart(
+                client_outstanding.set_index("client_id")[
+                    "outstanding_amount"
+                ]
+            )
+
+        # --------------------------------------------
+        # 5. AVERAGE DAYS TO PAY BY CLIENT
+        # --------------------------------------------
+        st.subheader("Average Days to Pay by Client")
+
+        st.dataframe(
+            avg_days,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if (
+            not avg_days.empty
+            and "avg_days_to_pay" in avg_days.columns
+        ):
+            st.bar_chart(
+                avg_days.set_index("client_id")[
+                    "avg_days_to_pay"
+                ]
+            )
+
+        # --------------------------------------------
+        # 6. MONTHLY CASH FLOW
+        # --------------------------------------------
+        st.subheader("Monthly Cash In vs Cash Out")
+
+        st.dataframe(
+            cash_flow,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        if not cash_flow.empty:
+            st.line_chart(
+                cash_flow.set_index("month")
+            )
+
+        # --------------------------------------------
+        # 7. RECEIVABLES RECONCILIATION
+        # --------------------------------------------
+        st.subheader("Receivables Reconciliation")
+
+        st.dataframe(
+            reconciliation,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.success(
+            "Task 12 analytics loaded successfully."
+        )
+
+    except Exception as exc:
+        st.error(
+            "Task 12 Invoices & Cash Flow dashboard "
+            "could not be loaded."
+        )
         st.exception(exc)
