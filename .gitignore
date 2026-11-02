@@ -40,3 +40,5 @@ task1-etl/src/*before_task1_fixes*
 ~$*.xlsx
 
 pulseiq_backup.dump
+
+task13-cross-department/unlock_PQ-13_reference_summary_dept_month.csv
