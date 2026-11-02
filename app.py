@@ -41,6 +41,7 @@ page = st.sidebar.radio(
         "Task 11 - Profit & Loss Analytics",
         "Task 12 - Invoices, Receivables & Cash Flow",
         "Task 13 - Cross-Department Impact",
+        "Task 14 - AI Signals Dashboard",
     ],
 )
 
@@ -3856,4 +3857,529 @@ elif page == "Task 13 - Cross-Department Impact":
             "Task 13 Cross-Department Impact dashboard "
             "could not be loaded."
         )
+        st.exception(exc)
+
+
+# --------------------------------------------
+# TASK 14 — AI SIGNALS DASHBOARD
+# --------------------------------------------
+elif page == "Task 14 - AI Signals Dashboard":
+
+    st.header("Task 14 — AI Signals Dashboard")
+
+    st.warning(
+        "AI-generated, for human review. "
+        "These signals are decision-support outputs, "
+        "not confirmed errors or predictions."
+    )
+
+    try:
+
+        # --------------------------------------------
+        # LOAD AI ANOMALY DATA
+        # --------------------------------------------
+        anomaly_df = warehouse_query(
+            """
+            SELECT
+                result_id,
+                source_dataset,
+                record_id,
+                employee_id,
+                period,
+                anomaly_score,
+                flagged,
+                reason_code,
+                reason_text,
+                money_at_risk,
+                model_version,
+                scored_at
+            FROM warehouse.fact_anomaly
+            """
+        )
+
+        # --------------------------------------------
+        # LOAD FORECAST DATA
+        # --------------------------------------------
+        forecast_df = warehouse_query(
+            """
+            SELECT
+                forecast_id,
+                metric,
+                department_id,
+                forecast_month,
+                forecast_value,
+                lower_80,
+                upper_80,
+                method,
+                trained_through,
+                model_version
+            FROM warehouse.fact_forecast
+            ORDER BY metric, department_id, forecast_month
+            """
+        )
+
+        # --------------------------------------------
+        # ANOMALY SUMMARY
+        # --------------------------------------------
+        st.subheader("1. AI Anomaly Signals")
+
+        if anomaly_df.empty:
+
+            st.info("No anomaly records are currently available.")
+
+        else:
+
+            total_anomalies = len(anomaly_df)
+
+            quantified_risk = anomaly_df[
+                "money_at_risk"
+            ].sum(min_count=1)
+
+            unquantified_count = anomaly_df[
+                "money_at_risk"
+            ].isna().sum()
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(
+                "Total Anomaly Signals",
+                f"{total_anomalies:,}"
+            )
+
+            col2.metric(
+                "Quantified Money at Risk",
+                (
+                    f"₹{quantified_risk:,.2f}"
+                    if pd.notna(quantified_risk)
+                    else "Not quantified"
+                )
+            )
+
+            col3.metric(
+                "Signals Without Risk Estimate",
+                f"{unquantified_count:,}"
+            )
+
+            st.caption(
+                "Money at risk represents estimated exposure "
+                "from flagged records. It is not confirmed loss."
+            )
+
+            # --------------------------------------------
+            # ANOMALIES BY REASON
+            # --------------------------------------------
+            st.subheader("Anomalies by Type")
+
+            reason_summary = (
+                anomaly_df
+                .groupby(
+                    ["reason_code"],
+                    dropna=False
+                )
+                .agg(
+                    anomaly_count=("result_id", "count"),
+                    quantified_records=(
+                        "money_at_risk",
+                        "count"
+                    ),
+                    money_at_risk=(
+                        "money_at_risk",
+                        lambda x: x.sum(min_count=1)
+                    )
+                )
+                .reset_index()
+            )
+
+            reason_summary = reason_summary.sort_values(
+                "money_at_risk",
+                ascending=False,
+                na_position="last"
+            )
+
+            risk_chart = reason_summary.copy()
+
+            risk_chart["risk_label"] = (
+                risk_chart["money_at_risk"]
+                .fillna(0)
+            )
+
+            st.bar_chart(
+                risk_chart.set_index("reason_code")[
+                    ["risk_label"]
+                ],
+                horizontal=True
+            )
+
+            st.dataframe(
+                reason_summary,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "money_at_risk": st.column_config.NumberColumn(
+                        "Money at Risk (₹)",
+                        format="₹%.2f"
+                    )
+                }
+            )
+
+            # --------------------------------------------
+            # TOP FLAGGED RECORDS
+            # --------------------------------------------
+            st.subheader("Highest-Risk Flagged Records")
+
+            top_anomalies = anomaly_df.sort_values(
+                "money_at_risk",
+                ascending=False,
+                na_position="last"
+            ).head(20)
+
+            st.dataframe(
+                top_anomalies[
+                    [
+                        "employee_id",
+                        "source_dataset",
+                        "period",
+                        "reason_code",
+                        "reason_text",
+                        "anomaly_score",
+                        "money_at_risk",
+                        "model_version"
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "money_at_risk": st.column_config.NumberColumn(
+                        "Money at Risk (₹)",
+                        format="₹%.2f"
+                    ),
+                    "anomaly_score": st.column_config.NumberColumn(
+                        "Anomaly Score",
+                        format="%.4f"
+                    )
+                }
+            )
+
+        # --------------------------------------------
+        # FORECAST DASHBOARD
+        # --------------------------------------------
+        st.subheader("2. AI Forecasts")
+
+        if forecast_df.empty:
+
+            st.info("No forecast records are currently available.")
+
+        else:
+
+            forecast_metrics = sorted(
+                forecast_df["metric"].dropna().unique()
+            )
+
+            selected_metric = st.selectbox(
+                "Select Forecast Metric",
+                forecast_metrics
+            )
+
+            metric_df = forecast_df[
+                forecast_df["metric"] == selected_metric
+            ].copy()
+
+            departments = sorted(
+                metric_df["department_id"]
+                .dropna()
+                .unique()
+            )
+
+            selected_department = st.selectbox(
+                "Select Department",
+                departments
+            )
+
+            selected_forecast = metric_df[
+                metric_df["department_id"]
+                == selected_department
+            ].copy()
+
+            selected_forecast = (
+                selected_forecast
+                .sort_values("forecast_month")
+            )
+
+            # --------------------------------------------
+            # FORECAST CHART
+            # --------------------------------------------
+            chart_df = selected_forecast.copy()
+
+            chart_df["forecast_month"] = (
+                pd.to_datetime(
+                    chart_df["forecast_month"]
+                )
+            )
+
+            chart_df = chart_df.set_index(
+                "forecast_month"
+            )
+
+            forecast_chart_columns = [
+                "forecast_value"
+            ]
+
+            has_confidence_band = (
+                chart_df["lower_80"].notna().any()
+                and chart_df["upper_80"].notna().any()
+            )
+
+            if has_confidence_band:
+
+                chart_df["lower_80"] = (
+                    chart_df["lower_80"]
+                )
+
+                chart_df["upper_80"] = (
+                    chart_df["upper_80"]
+                )
+
+                forecast_chart_columns.extend(
+                    ["lower_80", "upper_80"]
+                )
+
+            st.line_chart(
+                chart_df[forecast_chart_columns]
+            )
+
+            if has_confidence_band:
+
+                st.caption(
+                    "The lower_80 and upper_80 lines show "
+                    "the supplied 80% forecast interval. "
+                    "They are not guarantees."
+                )
+
+            st.dataframe(
+                selected_forecast[
+                    [
+                        "forecast_month",
+                        "forecast_value",
+                        "lower_80",
+                        "upper_80",
+                        "method",
+                        "trained_through",
+                        "model_version"
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.info(
+                f"Forecast method: "
+                f"{selected_forecast['method'].iloc[0]}. "
+                f"Training data through: "
+                f"{selected_forecast['trained_through'].iloc[0]}."
+            )
+
+        # --------------------------------------------
+        # HEADCOUNT HISTORICAL BACKTEST
+        # --------------------------------------------
+        st.subheader("3. Historical Headcount Forecast Accuracy")
+
+        headcount_backtest = warehouse_query(
+            """
+            SELECT
+                f.department_id,
+                f.forecast_month,
+                f.forecast_value,
+                a.headcount_end AS actual_headcount
+            FROM warehouse.fact_forecast f
+            JOIN warehouse.fact_headcount_monthly a
+                ON f.department_id = a.department_id
+                AND f.forecast_month = a.month_start_date
+            WHERE f.metric = 'headcount_end'
+              AND f.method = 'previous-month headcount (historical backtest)'
+            ORDER BY f.department_id, f.forecast_month
+            """
+        )
+
+        if headcount_backtest.empty:
+
+            st.info(
+                "No matching historical headcount "
+                "forecast and actual records found."
+            )
+
+        else:
+
+            headcount_backtest["absolute_error"] = (
+                (
+                    headcount_backtest["forecast_value"]
+                    - headcount_backtest["actual_headcount"]
+                ).abs()
+            )
+
+            headcount_backtest["percentage_error"] = (
+                headcount_backtest["absolute_error"]
+                / headcount_backtest["actual_headcount"].replace(
+                    0,
+                    pd.NA
+                )
+                * 100
+            )
+
+            overall_mae = (
+                headcount_backtest["absolute_error"].mean()
+            )
+
+            overall_mape = (
+                headcount_backtest["percentage_error"].mean()
+            )
+
+            col1, col2, col3 = st.columns(3)
+
+            col1.metric(
+                "Historical Comparisons",
+                f"{len(headcount_backtest):,}"
+            )
+
+            col2.metric(
+                "Mean Absolute Error",
+                f"{overall_mae:.2f} employees"
+            )
+
+            col3.metric(
+                "Mean Absolute Percentage Error",
+                f"{overall_mape:.2f}%"
+            )
+
+            st.caption(
+                "Historical backtest only. These metrics "
+                "describe past forecast performance and "
+                "do not guarantee future accuracy."
+            )
+
+            department_accuracy = (
+                headcount_backtest
+                .groupby("department_id")
+                .agg(
+                    comparisons=("absolute_error", "count"),
+                    MAE=("absolute_error", "mean"),
+                    MAPE=("percentage_error", "mean")
+                )
+                .reset_index()
+            )
+
+            st.subheader("Forecast Error by Department")
+
+            st.dataframe(
+                department_accuracy,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "MAE": st.column_config.NumberColumn(
+                        "MAE (Employees)",
+                        format="%.2f"
+                    ),
+                    "MAPE": st.column_config.NumberColumn(
+                        "MAPE (%)",
+                        format="%.2f%%"
+                    )
+                }
+            )
+
+            st.subheader("Historical Forecast vs Actual")
+
+            backtest_chart = (
+                headcount_backtest[
+                    headcount_backtest["department_id"]
+                    == st.selectbox(
+                        "Backtest Department",
+                        sorted(
+                            headcount_backtest[
+                                "department_id"
+                            ].unique()
+                        )
+                    )
+                ]
+                .sort_values("forecast_month")
+                .copy()
+            )
+
+            backtest_chart["forecast_month"] = (
+                pd.to_datetime(
+                    backtest_chart["forecast_month"]
+                )
+            )
+
+            backtest_chart = backtest_chart.set_index(
+                "forecast_month"
+            )
+
+            st.line_chart(
+                backtest_chart[
+                    [
+                        "forecast_value",
+                        "actual_headcount"
+                    ]
+                ]
+            )
+
+        # --------------------------------------------
+        # ATTRITION FORECAST VALIDATION NOTE
+        # --------------------------------------------
+        st.subheader("4. Attrition Forecast Validation")
+
+        attrition_forecasts = forecast_df[
+            forecast_df["metric"]
+            == "attrition_rate_monthly_pct"
+        ]
+
+        if not attrition_forecasts.empty:
+
+            st.info(
+                "The available attrition forecasts cover "
+                "future months only. Historical attrition "
+                "forecast error cannot currently be calculated "
+                "because matching historical forecast records "
+                "are not available."
+            )
+
+        # --------------------------------------------
+        # AI MODEL GOVERNANCE
+        # --------------------------------------------
+        st.subheader("5. AI Model Governance & Limitations")
+
+        st.warning(
+            "All signals and forecasts are AI-generated, "
+            "for human review. Investigate source records "
+            "before taking action."
+        )
+
+        st.markdown(
+            """
+            **Interpretation guidelines**
+            
+            - An anomaly is a statistical or rule-based signal,
+              not proof of fraud or misconduct.
+            - Money at risk is an estimated exposure,
+              not confirmed financial loss.
+            - Forecasts depend on historical patterns and
+              may not capture unexpected changes.
+            - Confidence bands indicate model uncertainty,
+              not guaranteed outcome ranges.
+            - Historical forecast errors do not guarantee
+              future accuracy.
+            - Human validation and domain review are required
+              before operational or financial decisions.
+            """
+        )
+
+        st.success(
+            "Task 14 — AI Signals Dashboard loaded successfully."
+        )
+
+    except Exception as exc:
+
+        st.error(
+            "Task 14 AI Signals Dashboard could not be loaded."
+        )
+
         st.exception(exc)
