@@ -38,3 +38,5 @@ task1-etl/src/*before_duplicate_fix*
 task1-etl/src/*before_task1_fixes*
 # Temporary Excel lock files
 ~$*.xlsx
+
+pulseiq_backup.dump

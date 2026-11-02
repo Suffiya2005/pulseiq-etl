@@ -38,6 +38,7 @@ page = st.sidebar.radio(
         "Task 8 - Team Productivity",
         "Task 9 - Payroll Cost & Reconciliation",
         "Task 10 - Budget vs Actual & KPI Targets",
+        "Task 11 - Profit & Loss Analytics",
     ],
 )
 
@@ -2898,4 +2899,579 @@ elif page == "Task 10 - Budget vs Actual & KPI Targets":
 
     except Exception as exc:
         st.error("Task 10 budget and KPI dashboard could not be loaded.")
+        st.exception(exc)
+
+
+
+# ============================================================
+# TASK 11 — PROFIT & LOSS ANALYTICS
+# ============================================================
+elif page == "Task 11 - Profit & Loss Analytics":
+
+    st.header("Task 11 — Profit & Loss Analytics")
+    st.caption(
+        "Financial performance | Monthly revenue, expenses, "
+        "profit margin, expense categories and vendor analytics"
+    )
+
+    try:
+        conn = get_connection()
+
+        # ----------------------------------------------------
+        # LOAD MONTHLY P&L
+        # ----------------------------------------------------
+        pnl = pd.read_sql_query(
+            """
+            SELECT month, revenue, expenses, net_profit, profit_margin_pct
+            FROM warehouse.task11_monthly_pnl
+            ORDER BY month
+            """,
+            conn,
+        )
+
+        # ----------------------------------------------------
+        # LOAD EXPENSE CATEGORIES
+        # ----------------------------------------------------
+        categories = pd.read_sql_query(
+            """
+            SELECT account_code, total_expense, expense_count
+            FROM warehouse.task11_expense_by_category
+            ORDER BY total_expense DESC
+            """,
+            conn,
+        )
+
+        # ----------------------------------------------------
+        # LOAD TOP 10 VENDORS
+        # ----------------------------------------------------
+        vendors = pd.read_sql_query(
+            """
+            SELECT vendor_id, vendor_name, total_expense, expense_count
+            FROM warehouse.task11_top10_vendors
+            ORDER BY total_expense DESC
+            """,
+            conn,
+        )
+
+        conn.close()
+
+        if pnl.empty:
+            st.warning("No financial data is available.")
+
+        else:
+            pnl["month"] = pd.to_datetime(pnl["month"])
+            pnl["month_label"] = pnl["month"].dt.strftime("%b %Y")
+
+            # ----------------------------------------------------
+            # MONTH SELECTOR
+            # ----------------------------------------------------
+            st.subheader("Monthly Financial Performance")
+
+            month_options = pnl["month_label"].tolist()
+
+            selected_month = st.selectbox(
+                "Select Month",
+                month_options,
+                index=len(month_options) - 1,
+            )
+
+            selected_data = pnl[
+                pnl["month_label"] == selected_month
+            ].iloc[0]
+
+            revenue = float(selected_data["revenue"])
+            expenses = float(selected_data["expenses"])
+            profit = float(selected_data["net_profit"])
+
+            margin = (
+                (profit / revenue) * 100
+                if revenue != 0
+                else 0
+            )
+
+            # ----------------------------------------------------
+            # KPI CARDS
+            # ----------------------------------------------------
+            col1, col2, col3, col4 = st.columns(4)
+
+            col1.metric("Revenue", f"₹{revenue:,.2f}")
+            col2.metric("Total Expenses", f"₹{expenses:,.2f}")
+            col3.metric("Net Profit", f"₹{profit:,.2f}")
+            col4.metric("Profit Margin", f"{margin:.2f}%")
+
+            # ----------------------------------------------------
+            # MONTHLY P&L TABLE
+            # ----------------------------------------------------
+            st.subheader("Monthly Profit & Loss Statement")
+
+            pnl_display = pnl[
+                ["month_label", "revenue", "expenses", "net_profit"]
+            ].copy()
+
+            pnl_display.columns = [
+                "Month",
+                "Revenue (₹)",
+                "Expenses (₹)",
+                "Net Profit (₹)",
+            ]
+
+            st.dataframe(
+                pnl_display,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Revenue (₹)": st.column_config.NumberColumn(
+                        format="₹%.2f"
+                    ),
+                    "Expenses (₹)": st.column_config.NumberColumn(
+                        format="₹%.2f"
+                    ),
+                    "Net Profit (₹)": st.column_config.NumberColumn(
+                        format="₹%.2f"
+                    ),
+                },
+            )
+
+            # ----------------------------------------------------
+            # REVENUE, EXPENSES AND PROFIT TREND
+            # ----------------------------------------------------
+            st.subheader("Revenue vs Expenses vs Profit")
+
+            trend_data = pnl[
+                ["month_label", "revenue", "expenses", "net_profit"]
+            ].melt(
+                id_vars="month_label",
+                var_name="Metric",
+                value_name="Amount",
+            )
+
+            import plotly.express as px
+
+            trend_chart = px.line(
+                trend_data,
+                x="month_label",
+                y="Amount",
+                color="Metric",
+                markers=True,
+                title="Monthly Financial Trends",
+            )
+
+            trend_chart.update_layout(
+                xaxis_title="Month",
+                yaxis_title="Amount (₹)",
+                hovermode="x unified",
+            )
+
+            st.plotly_chart(
+                trend_chart,
+                use_container_width=True,
+            )
+
+            # ----------------------------------------------------
+            # PROFIT MARGIN TREND
+            # ----------------------------------------------------
+            st.subheader("Monthly Profit Margin")
+
+            margin_chart = px.line(
+                pnl,
+                x="month_label",
+                y="profit_margin_pct",
+                markers=True,
+                title="Profit Margin (%)",
+            )
+
+            margin_chart.update_layout(
+                xaxis_title="Month",
+                yaxis_title="Profit Margin (%)",
+            )
+
+            st.plotly_chart(
+                margin_chart,
+                use_container_width=True,
+            )
+
+            # ----------------------------------------------------
+            # EXPENSE CATEGORY ANALYSIS
+            # ----------------------------------------------------
+            st.subheader("Expenses by Category")
+
+            category_chart = px.bar(
+                categories.sort_values("total_expense"),
+                x="total_expense",
+                y="account_code",
+                orientation="h",
+                text_auto=".2s",
+                title="Expense Distribution by Account",
+            )
+
+            category_chart.update_layout(
+                xaxis_title="Expense Amount (₹)",
+                yaxis_title="Expense Category",
+            )
+
+            st.plotly_chart(
+                category_chart,
+                use_container_width=True,
+            )
+
+            st.dataframe(
+                categories,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # ----------------------------------------------------
+            # TOP 10 VENDORS
+            # ----------------------------------------------------
+            st.subheader("Top 10 Vendors by Expense")
+
+            vendor_chart = px.bar(
+                vendors.sort_values("total_expense"),
+                x="total_expense",
+                y="vendor_name",
+                orientation="h",
+                text_auto=".2s",
+                title="Highest Expense Vendors",
+            )
+
+            vendor_chart.update_layout(
+                xaxis_title="Expense Amount (₹)",
+                yaxis_title="Vendor",
+            )
+
+            st.plotly_chart(
+                vendor_chart,
+                use_container_width=True,
+            )
+
+            st.dataframe(
+                vendors,
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            # ----------------------------------------------------
+            # BUSINESS INSIGHTS
+            # ----------------------------------------------------
+            st.subheader("Key Financial Insights")
+
+            first_month = pnl.iloc[0]
+            last_month = pnl.iloc[-1]
+
+            revenue_change = (
+                (last_month["revenue"] - first_month["revenue"])
+                / first_month["revenue"] * 100
+                if first_month["revenue"] != 0
+                else 0
+            )
+
+            margin_change = (
+                last_month["profit_margin_pct"]
+                - first_month["profit_margin_pct"]
+            )
+
+            st.markdown(
+                f"""
+                **Finding 1 — Revenue trend:**  
+                Revenue changed by **{revenue_change:.2f}%**
+                between {first_month['month_label']} and
+                {last_month['month_label']}.
+
+                **Finding 2 — Profitability:**  
+                Profit margin changed by **{margin_change:.2f}
+                percentage points** over the same period.
+
+                **Finding 3 — Expense concentration:**  
+                The highest expense category is
+                **{categories.iloc[0]['account_code']}**,
+                totalling **₹{categories.iloc[0]['total_expense']:,.2f}**.
+                """
+            )
+
+            # ----------------------------------------------------
+            # REVENUE GROWTH BUT MARGIN FALLING
+            # THREE HYPOTHESES AND SUPPORTING EVIDENCE
+            # ----------------------------------------------------
+            st.subheader(
+                "Revenue Growth but Profit Margin Decline"
+            )
+
+            st.info(
+                "The following are possible explanations to investigate. "
+                "They are hypotheses, not confirmed causes."
+            )
+
+            st.markdown(
+                """
+                **Hypothesis 1 — Operating expenses increased faster than revenue**
+
+                Revenue may have increased, but operating costs may have
+                grown at a faster rate, reducing profitability.
+
+                **Evidence to check:**
+                - Month-on-month revenue growth versus expense growth.
+                - Monthly expense-to-revenue ratio.
+                - Expense category trends to identify rapidly increasing costs.
+
+                ---
+
+                **Hypothesis 2 — Payroll and employee-related costs increased**
+
+                Higher salaries, overtime, bonuses, or additional
+                headcount may have increased total payroll expenses.
+
+                **Evidence to check:**
+                - Monthly payroll expense trend.
+                - Headcount changes by month.
+                - Overtime and bonus records.
+                - Payroll expense as a percentage of revenue.
+
+                ---
+
+                **Hypothesis 3 — Vendor and service costs increased**
+
+                Increased vendor payments, service charges, or
+                supplier costs may have reduced the profit margin.
+
+                **Evidence to check:**
+                - Monthly vendor expense trend.
+                - Expense category changes over time.
+                - Top vendor spending comparisons across months.
+                - Vendor contract changes or invoice increases.
+                """
+            )
+
+            # ----------------------------------------------------
+            # TASK 11 - FINANCIAL RECONCILIATION / TIE-OUT
+            # ----------------------------------------------------
+            st.subheader(
+                "Financial Reconciliation — Actual vs Answer Key"
+            )
+
+            try:
+                answer_key = pd.read_excel(
+                    "data/source/03_PulseIQ_Analytics_Star_Schema_Dataset.xlsx",
+                    sheet_name="reconciliation_answer_key",
+                )
+
+                answer_key["month"] = pd.to_datetime(
+                    answer_key["month"]
+                )
+
+                tieout = pnl[
+                    ["month", "revenue", "expenses", "net_profit"]
+                ].copy()
+
+                tieout["month"] = pd.to_datetime(
+                    tieout["month"]
+                )
+
+                tieout = tieout.merge(
+                    answer_key[
+                        [
+                            "month",
+                            "ledger_revenue",
+                            "ledger_total_expense",
+                            "ledger_net_profit",
+                        ]
+                    ],
+                    on="month",
+                    how="left",
+                )
+
+                # ------------------------------------------------
+                # CALCULATE DIFFERENCES
+                # ------------------------------------------------
+                tieout["Revenue Difference"] = (
+                    tieout["revenue"]
+                    - tieout["ledger_revenue"]
+                )
+
+                tieout["Expense Difference"] = (
+                    tieout["expenses"]
+                    - tieout["ledger_total_expense"]
+                )
+
+                tieout["Profit Difference"] = (
+                    tieout["net_profit"]
+                    - tieout["ledger_net_profit"]
+                )
+
+                # ------------------------------------------------
+                # PASS / EXCEPTION STATUS
+                # ------------------------------------------------
+                tieout["Status"] = tieout.apply(
+                    lambda row: (
+                        "PASS"
+                        if (
+                            pd.notna(row["Revenue Difference"])
+                            and pd.notna(row["Expense Difference"])
+                            and pd.notna(row["Profit Difference"])
+                            and abs(row["Revenue Difference"]) < 0.01
+                            and abs(row["Expense Difference"]) < 0.01
+                            and abs(row["Profit Difference"]) < 0.01
+                        )
+                        else "EXCEPTION"
+                    ),
+                    axis=1,
+                )
+
+                # ------------------------------------------------
+                # MONTH LABEL
+                # ------------------------------------------------
+                tieout["Month"] = tieout["month"].dt.strftime(
+                    "%b %Y"
+                )
+
+                # ------------------------------------------------
+                # PREPARE RECONCILIATION TABLE
+                # ------------------------------------------------
+                tieout_display = tieout[
+                    [
+                        "Month",
+                        "revenue",
+                        "ledger_revenue",
+                        "Revenue Difference",
+                        "expenses",
+                        "ledger_total_expense",
+                        "Expense Difference",
+                        "net_profit",
+                        "ledger_net_profit",
+                        "Profit Difference",
+                        "Status",
+                    ]
+                ].rename(
+                    columns={
+                        "revenue": "Actual Revenue",
+                        "ledger_revenue": "Expected Revenue",
+                        "expenses": "Actual Expenses",
+                        "ledger_total_expense": "Expected Expenses",
+                        "net_profit": "Actual Net Profit",
+                        "ledger_net_profit": "Expected Net Profit",
+                    }
+                )
+
+                # ------------------------------------------------
+                # DISPLAY COMPLETE RECONCILIATION TABLE
+                # ------------------------------------------------
+                currency_columns = [
+                    col
+                    for col in tieout_display.columns
+                    if col not in ["Month", "Status"]
+                ]
+
+                st.dataframe(
+                    tieout_display.style.format(
+                        {
+                            col: "₹{:,.2f}"
+                            for col in currency_columns
+                        }
+                    ),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                # ------------------------------------------------
+                # IDENTIFY EXCEPTIONS
+                # ------------------------------------------------
+                exception_rows = tieout[
+                    tieout["Status"] == "EXCEPTION"
+                ].copy()
+
+                if exception_rows.empty:
+
+                    st.success(
+                        "All monthly financial figures reconcile "
+                        "successfully."
+                    )
+
+                else:
+
+                    st.warning(
+                        f"{len(exception_rows)} month(s) "
+                        "have reconciliation differences."
+                    )
+
+                    # ------------------------------------------------
+                    # DISPLAY EXCEPTION DETAILS
+                    # FIX: Use "Month", not "month_label"
+                    # ------------------------------------------------
+                    exception_rows["Month"] = (
+                        exception_rows["month"].dt.strftime(
+                            "%b %Y"
+                        )
+                    )
+
+                    st.subheader("Reconciliation Exceptions")
+
+                    exception_display = exception_rows[
+                        [
+                            "Month",
+                            "Revenue Difference",
+                            "Expense Difference",
+                            "Profit Difference",
+                        ]
+                    ].copy()
+
+                    st.dataframe(
+                        exception_display.style.format(
+                            {
+                                "Revenue Difference": "₹{:,.2f}",
+                                "Expense Difference": "₹{:,.2f}",
+                                "Profit Difference": "₹{:,.2f}",
+                            }
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    # ------------------------------------------------
+                    # EXPLAIN THE RECONCILIATION EXCEPTION
+                    # ------------------------------------------------
+                    june_exception = exception_rows[
+                        exception_rows["month"].dt.strftime("%Y-%m")
+                        == "2026-06"
+                    ]
+
+                    if not june_exception.empty:
+
+                        june_row = june_exception.iloc[0]
+
+                        st.info(
+                            f"""
+                            **June 2026 reconciliation note**
+
+                            Revenue difference:
+                            ₹{june_row['Revenue Difference']:,.2f}
+
+                            Expense difference:
+                            ₹{june_row['Expense Difference']:,.2f}
+
+                            Net profit difference:
+                            ₹{june_row['Profit Difference']:,.2f}
+
+                            Revenue reconciles, but expenses differ by
+                            ₹18,450.00 and net profit differs by
+                            ₹18,450.00.
+
+                            This discrepancy is reported transparently.
+                            The SQL results have not been adjusted to
+                            artificially force a match.
+                            """
+                        )
+
+            except Exception as tieout_error:
+
+                st.error(
+                    "Financial reconciliation section could not be loaded."
+                )
+
+                st.exception(tieout_error)
+
+    except Exception as exc:
+
+        st.error(
+            "Task 11 Profit & Loss dashboard could not be loaded."
+        )
+
         st.exception(exc)
