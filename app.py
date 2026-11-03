@@ -42,7 +42,9 @@ page = st.sidebar.radio(
         "Task 12 - Invoices, Receivables & Cash Flow",
         "Task 13 - Cross-Department Impact",
         "Task 14 - AI Signals Dashboard",
+        "Task 15 - Executive Company-Health Scorecard",
     ],
+    key="dashboard_page",
 )
 
 CLEAN_DIR = ROOT / os.getenv("CLEAN_DATA_DIR", "data/clean")
@@ -3968,6 +3970,7 @@ elif page == "Task 14 - AI Signals Dashboard":
             # --------------------------------------------
             # ANOMALIES BY REASON
             # --------------------------------------------
+            
             st.subheader("Anomalies by Type")
 
             reason_summary = (
@@ -3991,23 +3994,22 @@ elif page == "Task 14 - AI Signals Dashboard":
             )
 
             reason_summary = reason_summary.sort_values(
-                "money_at_risk",
-                ascending=False,
-                na_position="last"
+                "anomaly_count",
+                ascending=True
             )
 
-            risk_chart = reason_summary.copy()
-
-            risk_chart["risk_label"] = (
-                risk_chart["money_at_risk"]
-                .fillna(0)
+            reason_summary["reason_code"] = (
+                reason_summary["reason_code"]
+                .fillna("UNKNOWN")
+                .astype(str)
             )
 
             st.bar_chart(
-                risk_chart.set_index("reason_code")[
-                    ["risk_label"]
+                reason_summary.set_index("reason_code")[
+                    ["anomaly_count"]
                 ],
-                horizontal=True
+                horizontal=True,
+                height=max(400, len(reason_summary) * 35)
             )
 
             st.dataframe(
@@ -4380,6 +4382,686 @@ elif page == "Task 14 - AI Signals Dashboard":
 
         st.error(
             "Task 14 AI Signals Dashboard could not be loaded."
+        )
+
+        st.exception(exc)
+
+
+# --------------------------------------------
+# TASK 15 — EXECUTIVE COMPANY-HEALTH SCORECARD
+# --------------------------------------------
+elif page == "Task 15 - Executive Company-Health Scorecard":
+
+    st.header("Task 15 — Executive Company-Health Scorecard")
+
+    st.caption(
+        "Company health at a glance | "
+        "Source: approved warehouse metric views"
+    )
+
+    # --------------------------------------------
+    # PRINT-FRIENDLY A4 STYLING
+    # --------------------------------------------
+    st.markdown(
+        """
+        <style>
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 8mm;
+            }
+
+            [data-testid="stSidebar"],
+            header,
+            footer,
+            [data-testid="stToolbar"] {
+                display: none !important;
+            }
+
+            .block-container {
+                max-width: 100% !important;
+                padding: 0 !important;
+            }
+
+            button {
+                display: none !important;
+            }
+
+            [data-testid="stMetric"] {
+                break-inside: avoid;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    try:
+
+        # --------------------------------------------
+        # MONTH SELECTOR
+        # --------------------------------------------
+        months_df = warehouse_query(
+            """
+            SELECT DISTINCT posting_period
+            FROM warehouse.metric_m16_revenue
+            ORDER BY posting_period DESC
+            """
+        )
+
+        if months_df.empty:
+            st.warning("No reporting months are available.")
+            st.stop()
+
+        month_options = (
+            months_df["posting_period"]
+            .dropna()
+            .astype(str)
+            .tolist()
+        )
+
+        selected_period = st.selectbox(
+            "Reporting Month",
+            month_options,
+            format_func=lambda x: pd.to_datetime(
+                x + "-01"
+            ).strftime("%B %Y")
+        )
+
+        month_start = pd.Timestamp(
+            selected_period + "-01"
+        )
+
+        previous_month = (
+            month_start - pd.DateOffset(months=1)
+        )
+
+        month_end = (
+            month_start + pd.offsets.MonthEnd(0)
+        ).date()
+
+        previous_month_start = previous_month.date()
+
+        previous_month_end = (
+            previous_month + pd.offsets.MonthEnd(0)
+        ).date()
+
+        current_start = month_start.date()
+
+        previous_period = previous_month.strftime("%Y-%m")
+
+        # --------------------------------------------
+        # LOAD METRIC VIEW SERIES
+        # --------------------------------------------
+        def load_scorecard_series(sql, params):
+
+            frame = warehouse_query(
+                sql,
+                params=params
+            )
+
+            if frame.empty:
+                return {}
+
+            result = {}
+
+            for _, row in frame.iterrows():
+
+                value = pd.to_numeric(
+                    row["value"],
+                    errors="coerce"
+                )
+
+                result[str(row["period"])] = (
+                    float(value)
+                    if pd.notna(value)
+                    else None
+                )
+
+            return result
+
+        # M01 — HEADCOUNT
+        headcount_series = load_scorecard_series(
+            """
+            SELECT
+                month_start_date::text AS period,
+                SUM(headcount)::numeric AS value
+            FROM warehouse.metric_m01_headcount
+            WHERE month_start_date IN (%s, %s)
+            GROUP BY month_start_date
+            """,
+            (previous_month_start, current_start)
+        )
+
+        # M04 — MONTHLY ATTRITION
+        attrition_series = load_scorecard_series(
+            """
+            SELECT
+                month_start_date::text AS period,
+                100.0 * SUM(exits) /
+                NULLIF(SUM(headcount_start), 0) AS value
+            FROM warehouse.metric_m04_monthly_attrition_rate
+            WHERE month_start_date IN (%s, %s)
+            GROUP BY month_start_date
+            """,
+            (previous_month_start, current_start)
+        )
+
+        # M09 — PAYROLL COST
+        payroll_series = load_scorecard_series(
+            """
+            SELECT
+                period_end_date::text AS period,
+                SUM(payroll_cost) AS value
+            FROM warehouse.metric_m09_payroll_cost
+            WHERE period_end_date IN (%s, %s)
+            GROUP BY period_end_date
+            """,
+            (previous_month_end, month_end)
+        )
+
+        # M11 — OVERTIME SHARE
+        overtime_series = load_scorecard_series(
+            """
+            SELECT
+                period_end_date::text AS period,
+                AVG(overtime_share_pct) AS value
+            FROM warehouse.metric_m11_overtime_share
+            WHERE period_end_date IN (%s, %s)
+            GROUP BY period_end_date
+            """,
+            (previous_month_end, month_end)
+        )
+
+        # M13 — ATTENDANCE RATE
+        attendance_series = load_scorecard_series(
+            """
+            SELECT
+                period_end_date::text AS period,
+                AVG(attendance_rate) * 100 AS value
+            FROM warehouse.metric_m13_attendance_rate
+            WHERE period_end_date IN (%s, %s)
+            GROUP BY period_end_date
+            """,
+            (previous_month_end, month_end)
+        )
+
+        # M16 — REVENUE
+        revenue_series = load_scorecard_series(
+            """
+            SELECT
+                posting_period AS period,
+                SUM(revenue) AS value
+            FROM warehouse.metric_m16_revenue
+            WHERE posting_period IN (%s, %s)
+            GROUP BY posting_period
+            """,
+            (previous_period, selected_period)
+        )
+
+        # M17 — NET PROFIT
+        profit_series = load_scorecard_series(
+            """
+            SELECT
+                posting_period AS period,
+                SUM(net_profit) AS value
+            FROM warehouse.metric_m17_net_profit
+            WHERE posting_period IN (%s, %s)
+            GROUP BY posting_period
+            """,
+            (previous_period, selected_period)
+        )
+
+        # M18 — OPERATING MARGIN
+        margin_series = load_scorecard_series(
+            """
+            SELECT
+                posting_period AS period,
+                AVG(operating_margin_pct) AS value
+            FROM warehouse.metric_m18_operating_margin
+            WHERE posting_period IN (%s, %s)
+            GROUP BY posting_period
+            """,
+            (previous_period, selected_period)
+        )
+
+        # --------------------------------------------
+        # TARGET VALIDATION
+        # --------------------------------------------
+        def load_target_status(sql, params):
+
+            frame = warehouse_query(
+                sql,
+                params=params
+            )
+
+            if frame.empty:
+                return None
+
+            row = frame.iloc[0]
+
+            if pd.isna(row["target"]):
+                return None
+
+            return {
+                "target": float(row["target"]),
+                "departments": int(row["departments"]),
+                "meeting": int(row["meeting_target"])
+            }
+
+        attendance_target = load_target_status(
+            """
+            SELECT
+                AVG(t.attendance_rate_target) * 100 AS target,
+                COUNT(a.department_id) AS departments,
+                COUNT(*) FILTER (
+                    WHERE a.attendance_rate >= t.attendance_rate_target
+                ) AS meeting_target
+            FROM warehouse.kpi_targets t
+            LEFT JOIN warehouse.metric_m13_attendance_rate a
+                ON a.department_id = t.department_id
+                AND a.period_end_date = %s
+            WHERE t.month = %s
+                AND t.attendance_rate_target IS NOT NULL
+            """,
+            (month_end, current_start)
+        )
+
+        attrition_target = load_target_status(
+            """
+            SELECT
+                AVG(t.attrition_monthly_target_pct) AS target,
+                COUNT(a.department_id) AS departments,
+                COUNT(*) FILTER (
+                    WHERE a.attrition_rate_monthly_pct
+                    <= t.attrition_monthly_target_pct
+                ) AS meeting_target
+            FROM warehouse.kpi_targets t
+            LEFT JOIN warehouse.metric_m04_monthly_attrition_rate a
+                ON a.department_id = t.department_id
+                AND a.month_start_date = %s
+            WHERE t.month = %s
+                AND t.attrition_monthly_target_pct IS NOT NULL
+            """,
+            (current_start, current_start)
+        )
+
+        overtime_target = load_target_status(
+            """
+            SELECT
+                AVG(t.overtime_share_target_pct) AS target,
+                COUNT(o.department_id) AS departments,
+                COUNT(*) FILTER (
+                    WHERE o.overtime_share_pct
+                    <= t.overtime_share_target_pct
+                ) AS meeting_target
+            FROM warehouse.kpi_targets t
+            LEFT JOIN warehouse.metric_m11_overtime_share o
+                ON o.department_id = t.department_id
+                AND o.period_end_date = %s
+            WHERE t.month = %s
+                AND t.overtime_share_target_pct IS NOT NULL
+            """,
+            (month_end, current_start)
+        )
+
+        # --------------------------------------------
+        # FORMATTING HELPERS
+        # --------------------------------------------
+        def get_value(series, period):
+
+            value = series.get(str(period))
+
+            return (
+                float(value)
+                if value is not None and pd.notna(value)
+                else None
+            )
+
+        def format_crores(value):
+
+            if value is None:
+                return "N/A"
+
+            return f"₹{value / 10000000:.2f} Cr"
+
+        def format_percent(value):
+
+            if value is None:
+                return "N/A"
+
+            return f"{value:.2f}%"
+
+        def trend_text(current, previous, mode):
+
+            if current is None or previous is None:
+                return "Previous month unavailable"
+
+            difference = current - previous
+
+            if mode == "count":
+                return f"{difference:+,.0f} vs previous month"
+
+            if mode == "pp":
+                return f"{difference:+.2f} pp vs previous month"
+
+            if previous == 0:
+                return f"{difference:+,.2f} absolute change"
+
+            change_pct = (
+                difference / abs(previous)
+            ) * 100
+
+            return f"{change_pct:+.2f}% vs previous month"
+
+            def target_status(info):
+
+              if not info or info["departments"] == 0:
+                return "⚪ Target data unavailable"
+
+            meeting = info["meeting"]
+            departments = info["departments"]
+
+            if meeting == departments:
+                label = "🟢 GREEN — All departments meet target"
+            else:
+                label = "🔴 RED — Target missed in some departments"
+
+            return (
+                f"{label} "
+                f"({meeting}/{departments} departments)"
+            )
+
+        # --------------------------------------------
+        # DETAIL PAGE NAVIGATION
+        # --------------------------------------------
+        def open_kpi_detail(destination):
+
+            st.session_state["dashboard_page"] = destination
+
+        # --------------------------------------------
+        # KPI DEFINITIONS
+        # --------------------------------------------
+                # --------------------------------------------
+        # KPI TARGET STATUS — OFFICIAL TARGET RULES
+        # --------------------------------------------
+        def scorecard_target_status(info):
+
+            if not info or info["departments"] == 0:
+                return "⚪ Target data unavailable"
+
+            meeting = info["meeting"]
+            departments = info["departments"]
+
+            if meeting == departments:
+                return (
+                    f"🟢 GREEN — All departments meet target "
+                    f"({meeting}/{departments})"
+                )
+
+            return (
+                f"🔴 RED — Some departments miss target "
+                f"({meeting}/{departments})"
+            )
+        current_date_key = current_start.isoformat()
+        previous_date_key = previous_month_start.isoformat()
+
+        current_end_key = month_end.isoformat()
+        previous_end_key = previous_month_end.isoformat()
+
+        kpis = [
+
+            {
+                "name": "Headcount",
+                "metric": "M01",
+                "source": "metric_m01_headcount",
+                "current": get_value(
+                    headcount_series, current_date_key
+                ),
+                "previous": get_value(
+                    headcount_series, previous_date_key
+                ),
+                "mode": "count",
+                "target": "Not configured",
+                "status": "⚪ No target configured",
+                "reason": "Shows the size of the active workforce.",
+                "page": "Task 5 - Workforce & Headcount",
+                "format": lambda v: f"{v:,.0f}" if v is not None else "N/A"
+            },
+
+            {
+                "name": "Monthly Attrition",
+                "metric": "M04",
+                "source": "metric_m04_monthly_attrition_rate",
+                "current": get_value(
+                    attrition_series, current_date_key
+                ),
+                "previous": get_value(
+                    attrition_series, previous_date_key
+                ),
+                "mode": "pp",
+                "target": (
+                    f"Average target: {attrition_target['target']:.2f}%"
+                    if attrition_target else "Not configured"
+                ),
+                "status": scorecard_target_status(attrition_target),
+                "reason": "Highlights workforce retention and exits.",
+                "page": "Task 7 - Attrition Analytics",
+                "format": format_percent
+            },
+
+            {
+                "name": "Payroll Cost",
+                "metric": "M09",
+                "source": "metric_m09_payroll_cost",
+                "current": get_value(
+                    payroll_series, current_end_key
+                ),
+                "previous": get_value(
+                    payroll_series, previous_end_key
+                ),
+                "mode": "percent",
+                "target": "Not configured",
+                "status": "⚪ No target configured",
+                "reason": "Tracks the company's employee cost.",
+                "page": "Task 9 - Payroll Cost & Reconciliation",
+                "format": format_crores
+            },
+
+            {
+                "name": "Overtime Share",
+                "metric": "M11",
+                "source": "metric_m11_overtime_share",
+                "current": get_value(
+                    overtime_series, current_end_key
+                ),
+                "previous": get_value(
+                    overtime_series, previous_end_key
+                ),
+                "mode": "pp",
+                "target": (
+                    f"Average target: {overtime_target['target']:.2f}%"
+                    if overtime_target else "Not configured"
+                ),
+                "status": scorecard_target_status(overtime_target),
+                "reason": "Highlights overtime's share of payroll cost.",
+                "page": "Task 9 - Payroll Cost & Reconciliation",
+                "format": format_percent
+            },
+
+            {
+                "name": "Attendance Rate",
+                "metric": "M13",
+                "source": "metric_m13_attendance_rate",
+                "current": get_value(
+                    attendance_series, current_end_key
+                ),
+                "previous": get_value(
+                    attendance_series, previous_end_key
+                ),
+                "mode": "pp",
+                "target": (
+                    f"Average target: {attendance_target['target']:.2f}%"
+                    if attendance_target else "Not configured"
+                ),
+                "status": scorecard_target_status(attendance_target),
+                "reason": "Measures workforce attendance levels.",
+                "page": "Task 4 - Attendance Trends Analysis",
+                "format": format_percent
+            },
+
+            {
+                "name": "Revenue",
+                "metric": "M16",
+                "source": "metric_m16_revenue",
+                "current": get_value(
+                    revenue_series, selected_period
+                ),
+                "previous": get_value(
+                    revenue_series, previous_period
+                ),
+                "mode": "percent",
+                "target": "Not configured",
+                "status": "⚪ No target configured",
+                "reason": "Shows the company's monthly income.",
+                "page": "Task 11 - Profit & Loss Analytics",
+                "format": format_crores
+            },
+
+            {
+                "name": "Net Profit",
+                "metric": "M17",
+                "source": "metric_m17_net_profit",
+                "current": get_value(
+                    profit_series, selected_period
+                ),
+                "previous": get_value(
+                    profit_series, previous_period
+                ),
+                "mode": "percent",
+                "target": "Not configured",
+                "status": "⚪ No target configured",
+                "reason": "Measures the company's monthly profitability.",
+                "page": "Task 11 - Profit & Loss Analytics",
+                "format": format_crores
+            },
+
+            {
+                "name": "Operating Margin",
+                "metric": "M18",
+                "source": "metric_m18_operating_margin",
+                "current": get_value(
+                    margin_series, selected_period
+                ),
+                "previous": get_value(
+                    margin_series, previous_period
+                ),
+                "mode": "pp",
+                "target": "Not configured",
+                "status": "⚪ No target configured",
+                "reason": "Shows profit earned per unit of revenue.",
+                "page": "Task 11 - Profit & Loss Analytics",
+                "format": format_percent
+            }
+        ]
+
+        # --------------------------------------------
+        # EXECUTIVE SCORECARD
+        # --------------------------------------------
+        st.markdown(
+            f"### Company Health — "
+            f"{pd.to_datetime(selected_period + '-01').strftime('%B %Y')}"
+        )
+
+        st.caption(
+            "Trend compares the selected month with the previous month. "
+            "An upward or downward trend is descriptive, not automatically good or bad."
+        )
+
+        st.caption(
+            "Department-level attendance and overtime are unweighted averages. "
+            "Headcount reflects the available department view and excludes "
+            "the CEO according to the metric catalogue."
+        )
+
+        # --------------------------------------------
+        # DISPLAY 8 KPI CARDS
+        # --------------------------------------------
+        columns = st.columns(4)
+
+        for index, item in enumerate(kpis):
+
+            with columns[index % 4]:
+
+                with st.container(border=True):
+
+                    st.markdown(
+                        f"**{item['name']}**"
+                    )
+
+                    st.caption(
+                        f"{item['metric']} · {item['source']}"
+                    )
+
+                    current = item["current"]
+                    previous = item["previous"]
+
+                    st.metric(
+                        label="Value",
+                        value=item["format"](current),
+                        delta=trend_text(
+                            current,
+                            previous,
+                            item["mode"]
+                        ),
+                        delta_color="off"
+                    )
+
+                    st.caption(
+                        f"Target: {item['target']}"
+                    )
+
+                    st.caption(
+                        f"Status: {item['status']}"
+                    )
+
+                    st.caption(
+                        item["reason"]
+                    )
+
+                    st.button(
+                        "View detailed page →",
+                        key=f"task15_kpi_link_{item['metric']}",
+                        on_click=open_kpi_detail,
+                        args=(item["page"],),
+                        use_container_width=True
+                    )
+
+        # --------------------------------------------
+        # SCORECARD FOOTNOTE
+        # --------------------------------------------
+        st.divider()
+
+        st.caption(
+            "Traceability: Every KPI is sourced from its identified "
+            "warehouse metric view. Target statuses are calculated from "
+            "warehouse.kpi_targets. KPIs without configured targets are "
+            "explicitly marked as not configured."
+        )
+
+        st.info(
+            "Print-friendly layout: Press Ctrl + P in your browser "
+            "and select A4 portrait to print or save this scorecard as PDF."
+        )
+
+        st.success(
+            "Task 15 — Executive Company-Health Scorecard loaded successfully."
+        )
+
+    except Exception as exc:
+
+        st.error(
+            "Task 15 Executive Scorecard could not be loaded."
         )
 
         st.exception(exc)
