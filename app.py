@@ -4884,7 +4884,7 @@ elif page == "Task 15 - Executive Company-Health Scorecard":
                 ),
                 "status": scorecard_target_status(overtime_target),
                 "reason": "Highlights overtime's share of payroll cost.",
-                "page": "Task 9 - Payroll Cost & Reconciliation",
+                "page": "Task 6 - Attendance & Leave Trends",
                 "format": format_percent
             },
 
