@@ -3,31 +3,30 @@
 ## 1. Overview
 Task 14 integrates AI-generated anomaly signals, forecasts, historical forecast validation, and model governance into the PulseIQ Analytics Streamlit dashboard.
 
-## 2. AI Anomaly Signals
+## 2. AI Anomaly Signals — VERIFIED
 - Total anomaly signals: 405
 - Quantified money at risk: ₹31,421,239.07
 - Signals without risk estimate: 221
-- Anomaly categories are displayed for investigation.
-- Highest-risk flagged records are available for human review.
+- Anomaly categories displayed for investigation.
+- Highest-risk flagged records available for human review.
 
 Note: Money at risk represents estimated exposure, not confirmed financial loss. Unquantified risk values are not treated as zero.
 
-## 3. AI Forecasts
+## 3. AI Forecasts — VERIFIED
 - Forecast metric: Monthly attrition rate
 - Forecast horizon: October 2026 – March 2027
 - Confidence interval: 80%
 - Forecast method: Same-month average of the last three years
 - Trained through: September 2026
+- Forecast values and lower_80 / upper_80 confidence bounds verified.
 
-The dashboard displays forecast values and lower_80 / upper_80 confidence bounds.
-
-## 4. Historical Headcount Forecast Validation
+## 4. Historical Headcount Forecast Validation — VERIFIED
 - Historical comparisons: 880
 - Overall MAE: 0.66 employees
 - Overall MAPE: 2.62%
 - Department-level results: forecast_error_by_department.csv
-
-The historical backtest uses the previous-month headcount method.
+- All 11 departments have 80 historical comparisons each.
+- Department-level validation reviewed in the dashboard.
 
 ## 5. Attrition Forecast Validation
 Historical attrition forecast error could not be calculated because matching historical forecast records are unavailable. Current attrition forecasts cover future periods only.
@@ -42,8 +41,19 @@ Historical attrition forecast error could not be calculated because matching his
 
 ## 7. Evidence Files
 - forecast_error_by_department.csv
-- dashboard_screenshot.png (dashboard evidence)
-- Task 14 dashboard screenshots covering anomaly signals, forecasts, validation, and governance
+- evidence/01_anomaly_signals.png
+- evidence/02_attrition_forecast.png
+- evidence/03_historical_forecast_validation.png
+- evidence/04_model_governance.png
 
 ## 8. Validation Status
-Task 14 dashboard loaded successfully in Streamlit. Anomaly analytics, forecast visualizations, historical headcount validation, and governance guidance were reviewed.
+Task 14 dashboard loaded successfully in Streamlit. Anomaly analytics, forecast visualizations, historical headcount validation, department-level results, and governance guidance were reviewed.
+
+Database validation completed successfully:
+- fact_anomaly: 405 records
+- fact_forecast: 952 records
+- Historical backtest: 880 comparisons
+- MAE: 0.66
+- MAPE: 2.62%
+
+**Status: VALIDATED**
