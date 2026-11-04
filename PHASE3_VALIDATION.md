@@ -34,3 +34,19 @@
 ## 6. Overall Status
 Phase 3 dashboard validation completed for the tested features.
 A4 printing requires further investigation due to the blank second page.
+## Task 15 — Executive Company-Health Scorecard
+
+- Status: PASSED
+- All 8 executive KPIs displayed successfully.
+- Reporting month selector verified.
+- KPI values and monthly trends displayed.
+- Target and traffic-light statuses displayed.
+- Detailed-page navigation links available.
+- Metric-view traceability verified.
+- Print-friendly layout verified.
+- Screenshots saved in `task15-evidence`.
+
+## Phase 3 Final Status
+
+Tasks 1–15 completed and tested.
+Evidence captured and saved.
