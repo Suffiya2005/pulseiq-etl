@@ -1,4 +1,4 @@
-﻿# PulseIQ ETL Pipeline
+# PulseIQ ETL Pipeline
 
 ## Project Overview
 PulseIQ ETL is a Python-based data engineering project that extracts,
@@ -195,5 +195,51 @@ These results describe the last verified run; rerun the checks before final subm
 - The source dates have not been changed because a verified correction is unavailable.
 - The rejected record is retained in `rejected/employees_rejected.csv` for audit and review.
 
+# Task 16 - Automated Monthly Management Report
 
+## Overview
+PulseIQ generates automated monthly management PDF reports from the PostgreSQL warehouse.
+
+## Requirements
+- Git
+- Python 3.14
+- Internet connection
+- Authorized PostgreSQL/Supabase warehouse access
+
+## Setup
+Clone the repository:
+git clone https://github.com/Suffiya2005/pulseiq-etl.git
+cd pulseiq-etl
+
+Create and activate a virtual environment:
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+Install dependencies:
+pip install -r requirements.txt
+
+## Configure Warehouse Connection
+Create a private .env file in the project root with WAREHOUSE_HOST, WAREHOUSE_PORT, WAREHOUSE_DB, WAREHOUSE_USER and WAREHOUSE_PASSWORD. Never commit credentials.
+
+## Generate a Monthly PDF Report
+Run python build_report.py --month 2026-10. Replace 2026-10 with the required YYYY-MM reporting month.
+
+## Report Output
+Reports are saved in
+reports/, for example
+reports/pulseiq_2026-10.pdf.
+
+## Automated Scheduling
+GitHub Actions workflow: .github/workflows/monthly-report.yml. It runs on the first day of each month at 09:00 IST and supports manual execution. Generated reports are uploaded as the pulseiq-monthly-report artifact and retained for 90 days.
+
+Required GitHub repository secrets: WAREHOUSE_HOST, WAREHOUSE_PORT, WAREHOUSE_DB, WAREHOUSE_USER and WAREHOUSE_PASSWORD.
+
+## Local Windows Scheduling
+Run .\run_monthly_report.ps1. Windows Task Scheduler is configured for the first day of each month at 09:00.
+
+## Validation Evidence
+See 	task16-evidence/TASK16_VALIDATION.md and 	task16-evidence/TASK16_ALTERNATIVE_VALIDATION.md.
+
+## Security
+Keep .env private. Use GitHub repository secrets for automated execution. Never commit database credentials.
 
