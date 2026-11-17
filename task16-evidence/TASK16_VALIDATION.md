@@ -123,3 +123,12 @@ The GitHub-hosted workflow successfully generated and uploaded the monthly PDF r
 The remaining validation activity is testing the project on a separate physical computer.
 
 Task 16 is pending final closure until this validation is completed.
+
+## New Department Scenario Test
+
+- Simulated a newly introduced department named New Test Department.
+- Verified that load_departments() dynamically retrieves department rows from warehouse.dim_department.
+- Verified that LEFT JOIN preserves departments when headcount, payroll and attendance metrics are unavailable.
+- Missing metrics were returned as None rather than zero.
+- Test result: PASS.
+- The test used simulated query results and did not modify the live Supabase database.
