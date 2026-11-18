@@ -43,6 +43,7 @@ page = st.sidebar.radio(
         "Task 13 - Cross-Department Impact",
         "Task 14 - AI Signals Dashboard",
         "Task 15 - Executive Company-Health Scorecard",
+        "Task 16 - Monthly Management Report",
     ],
     key="dashboard_page",
 )
@@ -5089,3 +5090,127 @@ elif page == "Task 15 - Executive Company-Health Scorecard":
         )
 
         st.exception(exc)
+# ============================================================
+# TASK 16 - MONTHLY MANAGEMENT REPORT
+# ============================================================
+
+elif page == "Task 16 - Monthly Management Report":
+
+    import subprocess
+    import sys
+    from datetime import date
+
+    st.subheader("Monthly Management Report")
+    st.write(
+        "Generate and download the monthly PulseIQ management report."
+    )
+
+    st.info(
+        "The report includes executive KPIs, financial performance, "
+        "workforce overview, department comparisons, and data methodology."
+    )
+
+    today = date.today()
+
+    months = [
+        f"{year}-{month:02d}"
+        for year in range(today.year - 2, today.year + 1)
+        for month in range(1, 13)
+    ]
+
+    months = [m for m in months if m <= today.strftime("%Y-%m")]
+    months.reverse()
+
+    selected_month = st.selectbox(
+        "Select Reporting Month",
+        months,
+        index=0,
+        key="task16_selected_month"
+    )
+
+    st.caption(f"Selected reporting period: {selected_month}")
+
+    if st.button(
+        "Generate Monthly Report",
+        type="primary",
+        use_container_width=True
+    ):
+
+        output_file = ROOT / "reports" / f"pulseiq_{selected_month}.pdf"
+
+        with st.spinner("Generating monthly PDF report..."):
+
+            try:
+
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(ROOT / "build_report.py"),
+                        "--month",
+                        selected_month,
+                        "--output",
+                        str(output_file),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=180,
+                    cwd=str(ROOT),
+                )
+
+                if result.returncode == 0 and output_file.exists():
+
+                    st.session_state["task16_report_path"] = str(output_file)
+                    st.session_state["task16_report_month"] = selected_month
+
+                    st.success("Monthly report generated successfully!")
+
+                    if result.stdout:
+                        st.code(result.stdout)
+
+                else:
+
+                    st.error("Report generation failed.")
+
+                    if result.stderr:
+                        st.code(result.stderr)
+
+                    if result.stdout:
+                        st.code(result.stdout)
+
+            except subprocess.TimeoutExpired:
+
+                st.error(
+                    "Report generation timed out. "
+                    "Please try again."
+                )
+
+            except Exception as exc:
+
+                st.error(f"Unexpected error: {exc}")
+
+    report_path = st.session_state.get("task16_report_path")
+    report_month = st.session_state.get("task16_report_month")
+
+    if report_path and report_month == selected_month:
+
+        report_file = Path(report_path)
+
+        if report_file.exists():
+
+            st.divider()
+            st.subheader("Your Report Is Ready")
+
+            st.write(f"Reporting month: **{selected_month}**")
+
+            st.download_button(
+                label="Download Monthly PDF Report",
+                data=report_file.read_bytes(),
+                file_name=report_file.name,
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
+            st.caption(
+                "The PDF includes the reporting period and "
+                "warehouse data cut-off timestamp."
+            )
