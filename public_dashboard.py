@@ -45,6 +45,12 @@ latest = df.iloc[-1]
 previous = df.iloc[-2]
 attendance = df.dropna(subset=["attendance_rate_pct"])
 latest_attendance = attendance.iloc[-1] if not attendance.empty else None
+latest_month_label = latest["month"].strftime("%B %Y")
+workforce_start_label = df["month"].min().strftime("%B %Y")
+attendance_start_label = (
+    attendance["month"].min().strftime("%B %Y")
+    if not attendance.empty else "Not available"
+)
 
 st.title("📊 PulseIQ Workforce Intelligence")
 st.caption("Public Workforce Analytics Dashboard | Synthetic Demonstration Data")
@@ -59,13 +65,12 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Data available through September 2026")
+st.sidebar.caption(f"Data available through {latest_month_label}")
 st.sidebar.caption("Public aggregated data only")
 
 if page == "Overview":
     st.header("Executive Overview")
-    st.caption("Latest reporting month: September 2026")
-
+    st.caption(f"Latest reporting month: {latest_month_label}")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric(
         "Closing Headcount",
@@ -190,8 +195,8 @@ else:
     )
 
     st.subheader("Data Coverage")
-    st.write("- Workforce history: January 2020 – September 2026")
-    st.write("- Attendance history: April 2025 – September 2026")
+    st.write(f"- Workforce history: {workforce_start_label} – {latest_month_label}")
+    st.write(f"- Attendance history: {attendance_start_label} – {latest_month_label}")
     st.write("- Data type: Synthetic demonstration data")
     st.write("- Reporting level: Company-wide aggregates only")
 
@@ -214,4 +219,4 @@ else:
     )
 
 st.markdown("---")
-st.caption("PulseIQ | Public Demonstration Dashboard | Data cutoff: September 2026")
+st.caption(f"PulseIQ | Public Demonstration Dashboard | Data cutoff: {latest_month_label}")
