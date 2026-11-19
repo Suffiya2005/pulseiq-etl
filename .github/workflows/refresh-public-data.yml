@@ -1,0 +1,55 @@
+name: PulseIQ Public Data Refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "45 3 1 * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pulseiq-public-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Refresh public data
+        env:
+          WAREHOUSE_HOST: ${{ secrets.WAREHOUSE_HOST }}
+          WAREHOUSE_PORT: ${{ secrets.WAREHOUSE_PORT }}
+          WAREHOUSE_DB: ${{ secrets.WAREHOUSE_DB }}
+          WAREHOUSE_USER: ${{ secrets.WAREHOUSE_USER }}
+          WAREHOUSE_PASSWORD: ${{ secrets.WAREHOUSE_PASSWORD }}
+        run: python refresh_public_data.py
+
+      - name: Commit refreshed public data
+        run: |
+          if git diff --quiet -- public_data/public_monthly_metrics.csv; then
+            echo "Public dataset is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public_data/public_monthly_metrics.csv
+          git commit -m "Refresh public workforce dashboard data"
+          git push
