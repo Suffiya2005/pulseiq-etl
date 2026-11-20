@@ -72,8 +72,8 @@ if CURRENT_ROLE == "MANAGER":
     st.error("Manager access is disabled until department/team row-level security is implemented.")
     st.stop()
 
-if CURRENT_ROLE == "HR":
-    st.error("HR dashboard access is not yet configured for all required pages.")
+if CURRENT_ROLE == "HR" and page != "Task 18 - Self-service KPI Explorer":
+    st.error("HR access is restricted to the approved workforce KPI explorer.")
     st.stop()
 
 if CURRENT_ROLE == "EXECUTIVE" and page != "Task 18 - Self-service KPI Explorer":
@@ -5430,6 +5430,179 @@ elif page == "Task 16 - Monthly Management Report":
             )
 
 elif page == "Task 18 - Self-service KPI Explorer":
+
+    if CURRENT_ROLE == "HR":
+
+        st.subheader("HR Workforce KPI Explorer")
+
+        st.write(
+            "Explore approved department-level workforce, payroll, "
+            "attendance and leave aggregates."
+        )
+
+        st.info(
+            "Privacy protection: Department results below the configured "
+            "employee threshold are suppressed. Employee-level records "
+            "and employee-count denominators are not displayed or exported."
+        )
+
+        hr_metric_ids = [
+            "M01", "M02", "M03", "M04", "M05",
+            "M06", "M07", "M08", "M09", "M10",
+            "M11", "M12", "M13", "M14", "M15",
+        ]
+
+        allowed_metric_ids = set(get_allowed_metrics(CURRENT_ROLE))
+
+        hr_metrics = {
+            METRICS[metric_id]["name"]: metric_id
+            for metric_id in hr_metric_ids
+            if metric_id in allowed_metric_ids
+            and metric_id in METRICS
+            and METRICS[metric_id].get("privacy_type") == "employee_count"
+        }
+
+        if not hr_metrics:
+            st.error("No workforce KPIs are authorized for this HR account.")
+            st.stop()
+
+        selected_metric_name = st.selectbox(
+            "Select a workforce KPI",
+            options=list(hr_metrics.keys()),
+            key="task18_hr_metric_selector",
+        )
+
+        selected_metric_id = hr_metrics[selected_metric_name]
+        metric_config = get_metric_config(selected_metric_id, CURRENT_ROLE)
+
+        if (
+            metric_config is None
+            or metric_config.get("privacy_type") != "employee_count"
+        ):
+            st.error("Access denied for this workforce KPI.")
+            st.stop()
+
+        try:
+            metric_data = task18_load_department_metric(selected_metric_id)
+
+            if metric_data is None or metric_data.empty:
+                st.warning("No data is currently available for this KPI.")
+
+            else:
+                metric_data = metric_data.copy()
+
+                metric_data["reporting_period"] = pd.to_datetime(
+                    metric_data["reporting_period"],
+                    errors="coerce",
+                )
+
+                metric_data["metric_value"] = pd.to_numeric(
+                    metric_data["metric_value"],
+                    errors="coerce",
+                )
+
+                metric_data = metric_data.dropna(
+                    subset=["reporting_period"]
+                )
+
+                if metric_data.empty:
+                    st.warning("No valid reporting periods were found.")
+
+                else:
+                    visible_data = metric_data.dropna(
+                        subset=["dimension_value", "metric_value"]
+                    ).copy()
+
+                    if visible_data.empty:
+                        st.warning(
+                            "All available department results are suppressed "
+                            "under the privacy threshold."
+                        )
+                    else:
+                        st.subheader("Department KPI Trend")
+
+                        chart_data = visible_data.pivot_table(
+                            index="reporting_period",
+                            columns="dimension_value",
+                            values="metric_value",
+                            aggfunc="first",
+                        ).sort_index()
+
+                        if not chart_data.empty:
+                            st.line_chart(chart_data)
+
+                    st.subheader("KPI Details")
+
+                    display_columns = [
+                        "reporting_period",
+                        "dimension_value",
+                        "metric_value",
+                        "privacy_status",
+                    ]
+
+                    display_data = metric_data[
+                        [
+                            column
+                            for column in display_columns
+                            if column in metric_data.columns
+                        ]
+                    ].copy()
+
+                    display_data["reporting_period"] = (
+                        display_data["reporting_period"].dt.strftime("%Y-%m-%d")
+                    )
+
+                    display_data = display_data.rename(
+                        columns={
+                            "reporting_period": "Reporting Period",
+                            "dimension_value": "Department ID",
+                            "metric_value": "Metric Value",
+                            "privacy_status": "Privacy Status",
+                        }
+                    )
+
+                    st.dataframe(
+                        display_data,
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+
+                    st.caption(
+                        "Department IDs are shown as stored in the warehouse. "
+                        "Suppressed department labels and metric values remain hidden."
+                    )
+
+                    csv_data = display_data.to_csv(index=False).encode("utf-8")
+
+                    st.download_button(
+                        label="Download Workforce KPI Data (CSV)",
+                        data=csv_data,
+                        file_name=f"{selected_metric_id}_hr_workforce_kpi.csv",
+                        mime="text/csv",
+                        key="task18_hr_download_csv",
+                    )
+
+        except PermissionError as error:
+            st.error(str(error))
+
+        except Exception as error:
+            st.error("Unable to load this workforce KPI.")
+            st.caption(f"Technical details: {error}")
+
+        st.divider()
+        st.subheader("HR Privacy and Access")
+
+        st.success(
+            "This HR view is restricted to approved workforce metrics M01-M15 "
+            "and department-level aggregates with privacy suppression."
+        )
+
+        st.warning(
+            "Company-level HR aggregation is not enabled in this version. "
+            "Manager-specific team access remains disabled pending row-level security."
+        )
+
+        st.stop()
 
     st.subheader("Self-Service KPI Explorer")
 
