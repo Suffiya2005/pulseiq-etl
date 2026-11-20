@@ -45,3 +45,6 @@ task13-cross-department/unlock_PQ-13_reference_summary_dept_month.csv
 
 # Task 16 generated PDF reports
 reports/
+
+# Streamlit private credentials
+.streamlit/secrets.toml

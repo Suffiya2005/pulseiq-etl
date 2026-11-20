@@ -7,6 +7,7 @@ import pandas as pd
 import psycopg
 import streamlit as st
 from dotenv import load_dotenv
+from task18_auth import require_login
 
 from task18_config import (
     ROLES,
@@ -32,6 +33,9 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+current_user = require_login()
+CURRENT_ROLE = current_user['role']
 
 st.title("PulseIQ Analytics Dashboard")
 st.caption(
@@ -63,6 +67,18 @@ page = st.sidebar.radio(
     ],
     key="dashboard_page",
 )
+
+if CURRENT_ROLE == "MANAGER":
+    st.error("Manager access is disabled until department/team row-level security is implemented.")
+    st.stop()
+
+if CURRENT_ROLE == "HR":
+    st.error("HR dashboard access is not yet configured for all required pages.")
+    st.stop()
+
+if CURRENT_ROLE == "EXECUTIVE" and page != "Task 18 - Self-service KPI Explorer":
+    st.error("Your role is restricted to the approved company KPI explorer.")
+    st.stop()
 
 CLEAN_DIR = ROOT / os.getenv("CLEAN_DATA_DIR", "data/clean")
 REJECTED_DIR = ROOT / os.getenv("REJECTED_DIR", "rejected")
@@ -5440,6 +5456,18 @@ elif page == "Task 18 - Self-service KPI Explorer":
         "Days Sales Outstanding (DSO)": "M20",
     }
 
+    allowed_metric_ids = set(get_allowed_metrics(CURRENT_ROLE))
+    financial_metrics = {
+        name: metric_id
+        for name, metric_id in financial_metrics.items()
+        if metric_id in allowed_metric_ids
+        and metric_id not in RESTRICTED_METRICS
+    }
+
+    if not financial_metrics:
+        st.error("Your role has no permission to view these financial KPIs.")
+        st.stop()
+
     selected_metric_name = st.selectbox(
         "Select a KPI",
         options=list(financial_metrics.keys()),
@@ -5447,12 +5475,15 @@ elif page == "Task 18 - Self-service KPI Explorer":
     )
 
     selected_metric_id = financial_metrics[selected_metric_name]
+    metric_config = get_metric_config(selected_metric_id, CURRENT_ROLE)
+    if metric_config is None:
+        st.error("Access denied for this KPI.")
+        st.stop()
 
     # --------------------------------------------------
     # 2. LOAD SELECTED KPI
     # --------------------------------------------------
 
-    metric_config = METRICS.get(selected_metric_id)
 
     try:
         metric_data = task18_load_company_financial_metric(
