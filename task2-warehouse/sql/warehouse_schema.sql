@@ -1,4 +1,3 @@
-
 CREATE SCHEMA IF NOT EXISTS warehouse;
 
 CREATE TABLE IF NOT EXISTS warehouse.dim_department (

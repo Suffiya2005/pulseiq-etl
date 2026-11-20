@@ -8,6 +8,21 @@ import psycopg
 import streamlit as st
 from dotenv import load_dotenv
 
+from task18_config import (
+    ROLES,
+    METRICS,
+    RESTRICTED_METRICS,
+    DIMENSIONS,
+    MIN_EMPLOYEES,
+    MIN_ATTRITION_EMPLOYEES,
+    MIN_TASKS,
+    MIN_COMPLETED_TASKS,
+    MIN_VALID_CYCLE_TASKS,
+    get_allowed_metrics,
+    get_allowed_dimensions,
+    get_metric_config,
+)
+
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / ".env")
 load_dotenv(ROOT / ".env.example", override=False)
@@ -44,6 +59,7 @@ page = st.sidebar.radio(
         "Task 14 - AI Signals Dashboard",
         "Task 15 - Executive Company-Health Scorecard",
         "Task 16 - Monthly Management Report",
+        "Task 18 - Self-service KPI Explorer",
     ],
     key="dashboard_page",
 )
@@ -67,7 +83,16 @@ def get_connection():
 def warehouse_query(query, params=None):
     with get_connection() as conn:
         return pd.read_sql_query(query, conn, params=params)
-
+def task18_warehouse_query(query, params=None):
+    with psycopg.connect(
+        host=os.getenv("WAREHOUSE_HOST", "localhost"),
+        port=int(os.getenv("WAREHOUSE_PORT", "5433")),
+        dbname=os.getenv("WAREHOUSE_DB", "pulseiq_warehouse"),
+        user=os.getenv("TASK18_DB_USER", ""),
+        password=os.getenv("TASK18_DB_PASSWORD", ""),
+        connect_timeout=5,
+    ) as conn:
+        return pd.read_sql_query(query, conn, params=params)
 
 def normalize_columns(frame):
     frame = frame.copy()
@@ -108,6 +133,179 @@ def find_column(frame, candidates, require_values=False):
 def numeric_column(frame, column):
     return pd.to_numeric(frame[column], errors="coerce").fillna(0)
 
+
+def task18_suppress_small_groups(
+    frame,
+    count_column,
+    minimum=MIN_EMPLOYEES,
+):
+    """Suppress small groups and their identifying labels."""
+
+    if frame is None or frame.empty:
+        return pd.DataFrame()
+
+    if count_column not in frame.columns:
+        raise ValueError(
+            f"Missing privacy count column: {count_column}"
+        )
+
+    result = frame.copy()
+
+    counts = pd.to_numeric(
+        result[count_column],
+        errors="coerce",
+    )
+
+    suppressed = counts.isna() | counts.lt(minimum)
+
+    result["privacy_status"] = "Visible"
+
+    result.loc[suppressed, "privacy_status"] = "Suppressed"
+
+    sensitive_columns = [
+        column
+        for column in [
+           "metric_value",
+            count_column,
+            "dimension_value",
+            "group_name",
+        ]
+        if column in result.columns
+    ]
+
+    result.loc[suppressed, sensitive_columns] = None
+
+    return result
+
+
+def task18_privacy_message():
+    st.info(
+        "Some results are hidden because the group does not "
+        "meet the minimum privacy threshold."
+    )
+
+
+
+def task18_load_company_financial_metric(metric_id):
+    """Load only approved company-level financial KPIs."""
+
+    allowed_metrics = {"M16", "M17", "M18", "M19", "M20"}
+
+    if metric_id not in allowed_metrics:
+        raise PermissionError("This KPI is not approved for this explorer.")
+
+    config = METRICS.get(metric_id)
+
+    if not config or config.get("privacy_type") != "company_only":
+        raise PermissionError("Only company-level metrics are permitted.")
+
+    view_name = config["view"]
+    date_column = config["date_column"]
+    value_column = config["value_column"]
+
+    # Validate every SQL identifier against the metric allowlist.
+    if not re.fullmatch(r"metric_m(?:16|17|18|19|20)_[a-z0-9_]+", view_name):
+        raise ValueError("Invalid metric view.")
+
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", date_column):
+        raise ValueError("Invalid date column.")
+
+    if not re.fullmatch(r"[a-z_][a-z0-9_]*", value_column):
+        raise ValueError("Invalid value column.")
+
+    query = f'''
+        SELECT
+            "{date_column}" AS reporting_period,
+            "{value_column}" AS metric_value
+        FROM warehouse."{view_name}"
+        ORDER BY "{date_column}"
+    '''
+
+    return task18_warehouse_query(query)
+
+def task18_load_department_metric(metric_id):
+    """Load an approved department KPI with a verified privacy denominator."""
+
+    allowed_metrics = {
+        "M01", "M02", "M03", "M04", "M05",
+        "M06", "M07", "M08", "M09", "M10",
+        "M11", "M12", "M13", "M14", "M15",
+    }
+
+    if metric_id not in allowed_metrics:
+        raise PermissionError(
+            "This department KPI is not approved."
+        )
+
+    config = METRICS.get(metric_id)
+
+    if not config or config.get("privacy_type") != "employee_count":
+        raise PermissionError(
+            "Only approved employee-based metrics are permitted."
+        )
+
+    view_name = config["view"]
+    date_column = config["date_column"]
+    value_column = config["value_column"]
+    dimension_column = config["dimension"]
+    minimum = config["minimum"]
+
+    if not re.fullmatch(r"metric_m(?:0[1-9]|1[0-5])_[a-z0-9_]+", view_name):
+        raise ValueError("Invalid metric view.")
+
+    for column in [date_column, value_column, dimension_column]:
+        if not re.fullmatch(r"[a-z_][a-z0-9_]*", column):
+            raise ValueError("Invalid metric column.")
+
+    if metric_id == "M01":
+        count_expression = 'm."headcount"'
+        join_clause = ""
+
+    elif metric_id in {"M04", "M05", "M06"}:
+        count_columns = {
+            "M04": "headcount_start",
+            "M05": "avg_headcount_12m",
+            "M06": "avg_headcount_12m",
+        }
+        count_expression = f'm."{count_columns[metric_id]}"'
+        join_clause = ""
+
+    else:
+        count_expression = 'h."headcount"'
+
+        if metric_id in {"M02", "M03"}:
+            date_match = 'm."month_start_date"'
+        else:
+            date_match = (
+                'date_trunc(\'month\', m."period_end_date")::date'
+            )
+
+        join_clause = f"""
+            JOIN warehouse.metric_m01_headcount h
+              ON h.department_id = m.department_id
+             AND h.month_start_date = {date_match}
+        """
+
+    query = f'''
+        SELECT
+            m."{date_column}" AS reporting_period,
+            m."{dimension_column}" AS dimension_value,
+            m."{value_column}" AS metric_value,
+            {count_expression} AS privacy_count
+        FROM warehouse."{view_name}" m
+        {join_clause}
+        ORDER BY m."{date_column}", m."{dimension_column}"
+    '''
+
+    result = task18_warehouse_query(query)
+
+    result = task18_suppress_small_groups(
+        result.rename(columns={"privacy_count": "employee_count"}),
+        count_column="employee_count",
+        minimum=minimum,
+    )
+
+    return result
 
 # ============================================================
 # OVERVIEW
@@ -171,22 +369,22 @@ if page == "Overview":
         ["Invoice ageing", "Client outstanding", "Monthly cash flow"],
        "Task 12 - Invoices, Receivables & Cash Flow"),
 
+
         ("Task 13 - Cross-Department Impact",
-        "Analyze cross-department workforce and business impact.",
-        ["Department comparisons", "Impact analysis", "Cross-functional metrics"],
-        "Task 13 - Cross-Department Impact"),
+         "Analyze cross-department workforce and business impact.",
+         ["Department comparisons", "Impact analysis", "Cross-functional metrics"],
+         "Task 13 - Cross-Department Impact"),
 
-       ("Task 14 - AI Signals Dashboard",
-        "Monitor AI-generated workforce signals and anomalies.",
-        ["AI signals", "Anomaly detection", "Risk indicators"],
-        "Task 14 - AI Signals Dashboard"),
+        ("Task 14 - AI Signals Dashboard",
+         "Monitor AI-generated workforce signals and anomalies.",
+         ["AI signals", "Anomaly detection", "Risk indicators"],
+         "Task 14 - AI Signals Dashboard"),
 
-       ("Task 15 - Executive Company-Health Scorecard",
-       "Review executive KPIs and overall company health.",
-       ["Executive KPIs", "Target status", "Company health scorecard"],
-       "Task 15 - Executive Company-Health Scorecard"),
-]
-    
+        ("Task 15 - Executive Company-Health Scorecard",
+         "Review executive KPIs and overall company health.",
+         ["Executive KPIs", "Target status", "Company health scorecard"],
+         "Task 15 - Executive Company-Health Scorecard"),
+             ]
 
     for i in range(0, len(overview_tasks), 2):
         columns = st.columns(2)
@@ -1841,13 +2039,13 @@ elif page == "Task 7 - Attrition Analytics":
                 )
                 .sort_values("exits", ascending=False)
             )
-            
+
             st.bar_chart(
                 department_summary.set_index("department_name")[["exits"]]
             )
 
             st.subheader("Key Findings")
-            
+
             total_exits = int(monthly["exits"].sum())
             total_voluntary = int(monthly["voluntary_exits"].sum())
             voluntary_pct = (
@@ -2088,7 +2286,7 @@ elif page == "Task 7 - Attrition Analytics":
 
                                 # Suppress small high-risk counts and their percentages.
                 # The total group size must still meet the minimum of 10.
-                
+
                 small_high_risk = (
                     risk_display["high_risk_employees"].between(1, 4)
                 )
@@ -3203,16 +3401,16 @@ elif page == "Task 11 - Profit & Loss Analytics":
 
             st.markdown(
                 f"""
-                **Finding 1 — Revenue trend:**  
+                **Finding 1 — Revenue trend:**
                 Revenue changed by **{revenue_change:.2f}%**
                 between {first_month['month_label']} and
                 {last_month['month_label']}.
 
-                **Finding 2 — Profitability:**  
+                **Finding 2 — Profitability:**
                 Profit margin changed by **{margin_change:.2f}
                 percentage points** over the same period.
 
-                **Finding 3 — Expense concentration:**  
+                **Finding 3 — Expense concentration:**
                 The highest expense category is
                 **{categories.iloc[0]['account_code']}**,
                 totalling **₹{categories.iloc[0]['total_expense']:,.2f}**.
@@ -3699,7 +3897,7 @@ elif page == "Task 12 - Invoices, Receivables & Cash Flow":
         )
         st.exception(exc)
 
-        
+
 # --------------------------------------------
 # TASK 13 - CROSS-DEPARTMENT IMPACT
 # --------------------------------------------
@@ -3995,7 +4193,7 @@ elif page == "Task 14 - AI Signals Dashboard":
             # --------------------------------------------
             # ANOMALIES BY REASON
             # --------------------------------------------
-            
+
             st.subheader("Anomalies by Type")
 
             reason_summary = (
@@ -4383,7 +4581,7 @@ elif page == "Task 14 - AI Signals Dashboard":
         st.markdown(
             """
             **Interpretation guidelines**
-            
+
             - An anomaly is a statistical or rule-based signal,
               not proof of fraud or misconduct.
             - Money at risk is an estimated exposure,
@@ -5214,3 +5412,186 @@ elif page == "Task 16 - Monthly Management Report":
                 "The PDF includes the reporting period and "
                 "warehouse data cut-off timestamp."
             )
+
+elif page == "Task 18 - Self-service KPI Explorer":
+
+    st.subheader("Self-Service KPI Explorer")
+
+    st.write(
+        "Explore approved company-level financial KPIs "
+        "using interactive charts and tables."
+    )
+
+    st.info(
+        "Privacy protection: This first version displays only "
+        "approved company-level aggregate metrics. Employee-level, "
+        "department-level and team-level records are not displayed."
+    )
+
+    # --------------------------------------------------
+    # 1. AVAILABLE KPI METRICS
+    # --------------------------------------------------
+
+    financial_metrics = {
+        "Revenue": "M16",
+        "Net Profit": "M17",
+        "Operating Margin": "M18",
+        "Payroll as % of Revenue": "M19",
+        "Days Sales Outstanding (DSO)": "M20",
+    }
+
+    selected_metric_name = st.selectbox(
+        "Select a KPI",
+        options=list(financial_metrics.keys()),
+        key="task18_metric_selector",
+    )
+
+    selected_metric_id = financial_metrics[selected_metric_name]
+
+    # --------------------------------------------------
+    # 2. LOAD SELECTED KPI
+    # --------------------------------------------------
+
+    metric_config = METRICS.get(selected_metric_id)
+
+    try:
+        metric_data = task18_load_company_financial_metric(
+            selected_metric_id
+        )
+
+        if metric_data is None or metric_data.empty:
+            st.warning("No data is currently available for this KPI.")
+
+        else:
+            # Ensure the reporting period is displayed correctly.
+            metric_data = metric_data.copy()
+
+            metric_data["reporting_period"] = pd.to_datetime(
+                metric_data["reporting_period"],
+                errors="coerce",
+            )
+
+            metric_data["metric_value"] = pd.to_numeric(
+                metric_data["metric_value"],
+                errors="coerce",
+            )
+
+            metric_data = metric_data.dropna(
+                subset=["reporting_period", "metric_value"]
+            ).sort_values("reporting_period")
+
+            if metric_data.empty:
+                st.warning("No valid KPI values were found.")
+
+            else:
+                # --------------------------------------------------
+                # 3. KPI SUMMARY
+                # --------------------------------------------------
+
+                latest_value = metric_data["metric_value"].iloc[-1]
+
+                unit = metric_config.get("unit", "")
+
+                if unit == "currency":
+                    formatted_value = f"{latest_value:,.2f}"
+                elif unit == "%":
+                    formatted_value = f"{latest_value:.2f}%"
+                elif unit == "days":
+                    formatted_value = f"{latest_value:.2f} days"
+                else:
+                    formatted_value = f"{latest_value:,.2f}"
+
+                st.metric(
+                    label=f"Latest {selected_metric_name}",
+                    value=formatted_value,
+                )
+
+                st.caption(
+                    "Latest available reporting period: "
+                    f"{metric_data['reporting_period'].iloc[-1].date()}"
+                )
+
+
+                # --------------------------------------------------
+                # 4. KPI TREND CHART
+                # --------------------------------------------------
+
+                if selected_metric_id == "M20":
+                    st.subheader("Days Sales Outstanding Snapshot")
+                    st.info(
+                        "DSO is displayed as a single company-level reporting snapshot."
+                    )
+                else:
+                    st.subheader(f"{selected_metric_name} Trend")
+
+                    chart_data = metric_data.set_index(
+                        "reporting_period"
+                    )[["metric_value"]]
+
+                    st.line_chart(chart_data)
+
+
+                # --------------------------------------------------
+                # 5. KPI DATA TABLE
+                # --------------------------------------------------
+
+                st.subheader("KPI Details")
+
+                display_data = metric_data.copy()
+
+                display_data["reporting_period"] = (
+                    display_data["reporting_period"].dt.strftime("%Y-%m-%d")
+                )
+
+                display_data = display_data.rename(
+                    columns={
+                        "reporting_period": "Reporting Period",
+                        "metric_value": "Metric Value",
+                    }
+                )
+
+                st.dataframe(
+                    display_data,
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                # --------------------------------------------------
+                # 6. DOWNLOAD APPROVED AGGREGATE DATA
+                # --------------------------------------------------
+
+                csv_data = display_data.to_csv(index=False).encode("utf-8")
+
+                st.download_button(
+                    label="Download KPI Data (CSV)",
+                    data=csv_data,
+                    file_name=f"{selected_metric_id}_kpi_data.csv",
+                    mime="text/csv",
+                    key="task18_download_csv",
+                )
+
+    except PermissionError as error:
+        st.error(str(error))
+
+    except Exception as error:
+        st.error("Unable to load this KPI.")
+        st.caption(f"Technical details: {error}")
+
+    # --------------------------------------------------
+    # 7. PRIVACY AND ACCESS NOTICE
+    # --------------------------------------------------
+
+    st.divider()
+
+    st.subheader("Privacy and Access")
+
+    st.success(
+        "Only company-level aggregate financial KPIs M16–M20 "
+        "are available in this initial version."
+    )
+
+    st.warning(
+        "Role-based authentication and secure manager-specific "
+        "access are not yet implemented. The current KPI selection "
+        "is not an authentication or authorization mechanism."
+    )

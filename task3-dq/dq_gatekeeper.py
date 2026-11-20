@@ -5,19 +5,22 @@ import os
 
 import pandas as pd
 import psycopg
+from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
+
+load_dotenv(ROOT / ".env")
+
 WORKBOOK = ROOT / "data" / "reference" / "03_PulseIQ_Analytics_Star_Schema_Dataset.xlsx"
 REPORT_PATH = ROOT / "task3-dq" / "dq_report.csv"
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5433,
-    "dbname": "pulseiq_warehouse",
-    "user": "pulseiq",
-    "password": os.getenv("PGPASSWORD"),
+    "host": os.getenv("WAREHOUSE_HOST", "localhost"),
+    "port": int(os.getenv("WAREHOUSE_PORT", "5433")),
+    "dbname": os.getenv("WAREHOUSE_DB", "pulseiq_warehouse"),
+    "user": os.getenv("WAREHOUSE_USER", "pulseiq"),
+    "password": os.getenv("WAREHOUSE_PASSWORD"),
 }
-
 
 CHECKS = [
     {
