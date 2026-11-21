@@ -48,3 +48,17 @@ reports/
 
 # Streamlit private credentials
 .streamlit/secrets.toml
+# Task 18 local backups and review archives
+task18-backup/
+task18-access-update.zip
+task18-review.zip
+app.py.before_manager_rls_backup
+# Task 18 private credentials and temporary test files
+.streamlit/secrets*.toml
+admin_hash.txt
+check_task18_login.py
+final_auth_test.py
+generate_task18_hashes.py
+reset_admin_password.py
+test_task18_direct.py
+task18_auth.py.google-backup

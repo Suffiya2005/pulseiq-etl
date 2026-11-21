@@ -8,7 +8,7 @@ import psycopg
 import streamlit as st
 from dotenv import load_dotenv
 from task18_auth import require_login
-
+from task18_manager import load_manager_metric, MANAGER_METRICS
 from task18_config import (
     ROLES,
     METRICS,
@@ -5605,6 +5605,127 @@ elif page == "Task 18 - Self-service KPI Explorer":
         st.stop()
 
     st.subheader("Self-Service KPI Explorer")
+    if CURRENT_ROLE == "MANAGER":
+        st.subheader("Manager Department KPI Explorer")
+
+        st.write(
+            "View team productivity trends for your assigned department(s)."
+        )
+
+        st.info(
+            "Only department-scoped aggregates are displayed. "
+            "Groups with fewer than five qualifying tasks are suppressed."
+        )
+
+        manager_metrics = {
+            "Task Completion Rate": "M22",
+            "On-Time Delivery Rate": "M23",
+            "Team Velocity": "M24",
+            "Average Cycle Time": "M25",
+        }
+
+        allowed_metric_ids = set(get_allowed_metrics(CURRENT_ROLE))
+
+        manager_metrics = {
+            name: metric_id
+            for name, metric_id in manager_metrics.items()
+            if metric_id in allowed_metric_ids
+            and metric_id in MANAGER_METRICS
+        }
+
+        if not manager_metrics:
+            st.error("No Manager productivity KPIs are authorized.")
+            st.stop()
+
+        selected_name = st.selectbox(
+            "Select a KPI",
+            list(manager_metrics.keys()),
+            key="task18_manager_metric",
+        )
+
+        metric_id = manager_metrics[selected_name]
+        metric_config = get_metric_config(metric_id, CURRENT_ROLE)
+
+        try:
+            manager_data = load_manager_metric(
+                metric_id=metric_id,
+                department_ids=current_user["department_ids"],
+                query_runner=task18_warehouse_query,
+                suppress_fn=task18_suppress_small_groups,
+                metric_config=metric_config,
+            )
+
+            if manager_data is None or manager_data.empty:
+                st.warning("No data is available for this KPI.")
+                st.stop()
+
+            visible_data = manager_data[
+                manager_data["privacy_status"] == "Visible"
+            ].copy()
+
+            suppressed_count = int(
+                (manager_data["privacy_status"] == "Suppressed").sum()
+            )
+
+            if suppressed_count:
+                task18_privacy_message()
+
+            if visible_data.empty:
+                st.warning(
+                    "No groups meet the minimum privacy threshold."
+                )
+                st.stop()
+
+            st.subheader(selected_name)
+
+            st.line_chart(
+                visible_data,
+                x="reporting_period",
+                y="metric_value",
+                color="dimension_value",
+            )
+
+            display_columns = [
+                "reporting_period",
+                "dimension_value",
+                "metric_value",
+                "privacy_status",
+            ]
+
+            st.dataframe(
+                visible_data[display_columns],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+            csv_data = visible_data[display_columns].to_csv(index=False)
+
+            st.download_button(
+                "Download visible results (CSV)",
+                data=csv_data,
+                file_name=f"{metric_id.lower()}_manager_report.csv",
+                mime="text/csv",
+                key="task18_manager_download_csv",
+            )
+
+        except PermissionError as error:
+            st.error(str(error))
+
+        except Exception:
+            st.error("Unable to load this Manager KPI.")
+            st.caption(
+                "Please contact the administrator if the problem continues."
+            )
+
+        st.divider()
+        st.subheader("Manager Privacy and Access")
+
+        st.success(
+            "Manager KPIs M22-M25 use historical employee-department "
+            "mapping and department-scoped database filtering."
+        )
+
+        st.stop()
 
     st.write(
         "Explore approved company-level financial KPIs "
