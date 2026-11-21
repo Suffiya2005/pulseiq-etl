@@ -1,0 +1,56 @@
+{
+  "pipeline": "PulseIQ ETL",
+  "started_at_utc": "2026-11-21T08:47:26.293785+00:00",
+  "as_of_date": "2026-11-21",
+  "datasets": [
+    {
+      "dataset": "employees",
+      "input_rows": 1606,
+      "output_rows": 1605,
+      "rejected_rows": 1,
+      "csv_output": "data\\clean\\employees.csv",
+      "rejected_output": "rejected\\employees_rejected.csv",
+      "parquet_status": "saved"
+    },
+    {
+      "dataset": "salary",
+      "input_rows": 4,
+      "output_rows": 4,
+      "rejected_rows": 0,
+      "csv_output": "data\\clean\\salary.csv",
+      "rejected_output": "rejected\\salary_rejected.csv",
+      "parquet_status": "saved"
+    },
+    {
+      "dataset": "payroll",
+      "input_rows": 7344,
+      "output_rows": 7340,
+      "rejected_rows": 4,
+      "csv_output": "data\\clean\\payroll.csv",
+      "rejected_output": "rejected\\payroll_rejected.csv",
+      "parquet_status": "saved"
+    },
+    {
+      "dataset": "attendance",
+      "input_rows": 7343,
+      "output_rows": 7343,
+      "rejected_rows": 0,
+      "csv_output": "data\\clean\\attendance.csv",
+      "rejected_output": "rejected\\attendance_rejected.csv",
+      "parquet_status": "saved"
+    },
+    {
+      "dataset": "leave",
+      "input_rows": 3441,
+      "output_rows": 3439,
+      "rejected_rows": 2,
+      "csv_output": "data\\clean\\leave.csv",
+      "rejected_output": "rejected\\leave_rejected.csv",
+      "parquet_status": "saved"
+    }
+  ],
+  "total_input": 19738,
+  "total_output": 19731,
+  "total_rejected": 7,
+  "finished_at_utc": "2026-11-21T08:47:27.297264+00:00"
+}
