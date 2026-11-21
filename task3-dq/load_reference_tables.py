@@ -19,60 +19,49 @@ TABLES = [
 ]
 
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5433,
-    "dbname": "pulseiq_warehouse",
-    "user": "pulseiq",
-    "password": os.getenv("PGPASSWORD"),
+    "host": os.getenv("WAREHOUSE_HOST", "localhost"),
+    "port": int(os.getenv("WAREHOUSE_PORT", "5433")),
+    "dbname": os.getenv("WAREHOUSE_DB", "pulseiq_warehouse"),
+    "user": os.getenv("WAREHOUSE_USER", "pulseiq"),
+    "password": os.getenv("WAREHOUSE_PASSWORD"),
 }
 
-
-
 def clean_value(value):
-    """Convert Excel/Pandas values into JSON-serializable Python values."""
-    import datetime
-    import numpy as np
-
+    """Convert pandas/numpy values to JSON-compatible Python values."""
     if pd.isna(value):
         return None
 
-    if isinstance(value, (pd.Timestamp, datetime.datetime, datetime.date)):
-        return value.isoformat()
-def clean_value(value):
-    """Convert pandas/numpy values to PostgreSQL-friendly Python values."""
-    if pd.isna(value):
-        return None
     if hasattr(value, "to_pydatetime"):
-        return value.to_pydatetime()
+        value = value.to_pydatetime()
+
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+
     if hasattr(value, "item"):
         return value.item()
-    return value
-    if isinstance(value, np.generic):
-        return clean_value(value.item())
 
     return value
-
-
-
 def load_table(conn, table_name):
     df = pd.read_excel(WORKBOOK, sheet_name=table_name)
     df.columns = [str(c).strip().lower() for c in df.columns]
 
     with conn.cursor() as cur:
+        # Preserve the existing table and its permissions.
         cur.execute(
-            sql.SQL("DROP TABLE IF EXISTS {}.{}").format(
+            sql.SQL("""
+                CREATE TABLE IF NOT EXISTS {}.{} (
+                    source_row BIGSERIAL PRIMARY KEY,
+                    record JSONB NOT NULL
+                )
+            """).format(
                 sql.Identifier("dq_reference"),
                 sql.Identifier(table_name),
             )
         )
 
-        # Store source values in JSONB for a safe, loss-minimizing import.
+        # Clear old records without dropping the table.
         cur.execute(
-            sql.SQL(
-                "CREATE TABLE {}.{} ("
-                "source_row BIGSERIAL PRIMARY KEY, "
-                "record JSONB NOT NULL)"
-            ).format(
+            sql.SQL("TRUNCATE TABLE {}.{}").format(
                 sql.Identifier("dq_reference"),
                 sql.Identifier(table_name),
             )
@@ -92,8 +81,20 @@ def load_table(conn, table_name):
             }
             cur.execute(insert_query, (Jsonb(record),))
 
-    print(f"Loaded {len(df):,} rows into dq_reference.{table_name}")
+        # Keep API access after every refresh.
+        if table_name in ("fact_ledger", "fact_invoice"):
+            cur.execute(
+                sql.SQL(
+                    "GRANT SELECT ON TABLE {}.{} TO {}"
+                ).format(
+                    sql.Identifier("dq_reference"),
+                    sql.Identifier(table_name),
+                    sql.Identifier("pulseiq_dashboard"),
+                )
+            )
 
+    print(f"Loaded {len(df):,} rows into dq_reference.{table_name}")
+    return len(df)
 
 def main():
     if not WORKBOOK.exists():
@@ -101,7 +102,7 @@ def main():
 
     if not DB_CONFIG["password"]:
         raise RuntimeError(
-            "PGPASSWORD is not set. Set it in PowerShell before running."
+            "WAREHOUSE_PASSWORD is not set. Check the ETL environment configuration."
         )
 
     with psycopg.connect(**DB_CONFIG) as conn:
@@ -111,8 +112,56 @@ def main():
             )
         )
 
+        # Create source refresh metadata table.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS
+            dq_reference.source_refresh_metadata (
+                source_table TEXT PRIMARY KEY,
+                last_successful_refresh TIMESTAMPTZ NOT NULL,
+                rows_loaded BIGINT NOT NULL,
+                source_file TEXT NOT NULL,
+                load_status TEXT NOT NULL
+                    CHECK (load_status IN ('success'))
+            )
+        """)
+
+        # Allow the read-only API account to inspect metadata.
+        conn.execute("""
+            GRANT SELECT ON TABLE
+            dq_reference.source_refresh_metadata
+            TO pulseiq_dashboard
+        """)
+
+        # Load each reference table and record its successful refresh.
         for table_name in TABLES:
-            load_table(conn, table_name)
+            rows_loaded = load_table(conn, table_name)
+
+            conn.execute("""
+                INSERT INTO dq_reference.source_refresh_metadata (
+                    source_table,
+                    last_successful_refresh,
+                    rows_loaded,
+                    source_file,
+                    load_status
+                )
+                VALUES (
+                    %s,
+                    clock_timestamp(),
+                    %s,
+                    %s,
+                    'success'
+                )
+                ON CONFLICT (source_table)
+                DO UPDATE SET
+                    last_successful_refresh = EXCLUDED.last_successful_refresh,
+                    rows_loaded = EXCLUDED.rows_loaded,
+                    source_file = EXCLUDED.source_file,
+                    load_status = EXCLUDED.load_status
+            """, (
+                table_name,
+                rows_loaded,
+                WORKBOOK.name,
+            ))
 
     print("\nReference data loaded successfully.")
 

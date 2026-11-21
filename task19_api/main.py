@@ -163,17 +163,77 @@ def read_metric(
 
 @app.get("/freshness")
 def freshness(user: dict = Depends(require_api_user)):
+    required_sources = ("fact_ledger", "fact_invoice")
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT
+                        source_table,
+                        last_successful_refresh,
+                        rows_loaded,
+                        source_file,
+                        load_status
+                    FROM dq_reference.source_refresh_metadata
+                    WHERE source_table IN (%s, %s)
+                    ORDER BY source_table
+                """, required_sources)
+
+                rows = cursor.fetchall()
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to read source refresh metadata."
+        ) from exc
+
+    sources = {}
+
+    for row in rows:
+        sources[row[0]] = {
+            "last_successful_refresh": (
+                row[1].isoformat() if row[1] else None
+            ),
+            "rows_loaded": row[2],
+            "source_file": row[3],
+            "load_status": row[4],
+        }
+
+    all_verified = all(
+        source in sources
+        and sources[source]["load_status"] == "success"
+        for source in required_sources
+    )
+
+    refresh_times = [
+        row[1] for row in rows if row[1] is not None
+    ]
+
+    last_refresh = (
+        max(refresh_times).isoformat()
+        if refresh_times else None
+    )
+
     return {
-        "pipeline_status": "not_checked",
-        "financial_feed_status": "unverified",
-        "last_refresh": None,
-        "source_refresh_metadata_available": False,
-        "message": (
-            "The API cannot currently verify the latest financial feed refresh."
+        "pipeline_status": (
+            "source_refresh_verified"
+            if all_verified else "source_refresh_incomplete"
         ),
-        "reason": (
-            "Source-level refresh metadata for dq_reference.fact_ledger "
-            "and dq_reference.fact_invoice is not available to the API. "
-            "The general ETL run summary does not verify these financial feeds."
+        "financial_feed_status": (
+            "verified" if all_verified else "unverified"
+        ),
+        "last_refresh": last_refresh,
+        "source_refresh_metadata_available": True,
+        "sources": sources,
+        "message": (
+            "Both financial source feeds have successful refresh records."
+            if all_verified
+            else "One or more financial source refresh records are missing or unsuccessful."
+        ),
+        "freshness_note": (
+            "Successful source refresh records are verified. "
+            "A freshness SLA has not been configured, so this does not "
+            "independently establish that the feeds meet a freshness target."
         ),
     }
