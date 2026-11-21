@@ -413,6 +413,7 @@ def clean_salary(
     
     valid, rejected = split_valid_rejected(df, reasons)
     return valid, rejected
+
 # --------------------------------------------------
 # 6. TRANSFORM PAYROLL
 # --------------------------------------------------
@@ -428,10 +429,10 @@ def clean_payroll(
     parse_dates(df, ["period_end_date"])
     to_numeric(df, PAYROLL_NUMERIC_COLUMNS)
 
+    # Convert numeric keys only.
     for column in [
         "employee_key",
         "date_key",
-        "department_id",
         "role_id",
         "run_id",
     ]:
@@ -441,10 +442,19 @@ def clean_payroll(
                 errors="coerce",
             )
 
+    # Department IDs are alphanumeric codes such as D01 and D08.
+    if "department_id" in df.columns:
+        df["department_id"] = (
+            df["department_id"]
+            .astype("string")
+            .str.strip()
+        )
+
     duplicate_mask = df.duplicated(keep="first")
     df = df.reset_index(drop=True)
     reasons = pd.Series("", index=df.index, dtype="object")
     add_reason(reasons, duplicate_mask, "duplicate_exact_row")
+
     for column in [
         "payroll_item_id",
         "employee_id",
@@ -470,20 +480,26 @@ def clean_payroll(
         df["payroll_item_id"].duplicated(keep=False),
         "duplicate_payroll_item_id",
     )
-    synthetic_payroll = (
-    df["payroll_item_id"].astype(str).str.startswith("PI-X")
-)
-    duplicate_employee_month = df.duplicated(
-        subset=["employee_id", "period_end_date"],
-        keep=False,
+
+    # Detect identical payroll transactions with different IDs.
+    # Keep the first source record and quarantine subsequent copies.
+    business_columns = [
+        column
+        for column in df.columns
+        if column != "payroll_item_id"
+    ]
+
+    duplicate_business_record = df.duplicated(
+        subset=business_columns,
+        keep="first",
     )
+
     add_reason(
-    reasons,
-    duplicate_employee_month
-    & ~synthetic_payroll
-    & ~df["payroll_item_id"].astype(str).str.startswith("PI-"),
-    "duplicate_employee_month_payroll",
-)
+        reasons,
+        duplicate_business_record,
+        "duplicate_payroll_business_record",
+    )
+
     for column in PAYROLL_NUMERIC_COLUMNS:
         if column in df.columns:
             add_reason(

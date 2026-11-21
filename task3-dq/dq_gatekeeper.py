@@ -99,12 +99,14 @@ CHECKS = [
     "table": "fact_payroll",
     "severity": "CRITICAL",
     "sql": """
-       SELECT employee_id, run_id, COUNT(*) AS row_count
-       FROM warehouse.fact_payroll
-       GROUP BY employee_id, run_id
-        HAVING COUNT(*) > 1
+       SELECT
+    payroll_item_id,
+    COUNT(*) AS row_count
+FROM warehouse.fact_payroll
+GROUP BY payroll_item_id
+HAVING COUNT(*) > 1
   """,
-    "reason": "Duplicate employee-run payroll rows can overstate payroll totals.",
+    "reason": "Duplicate payroll item IDs can overstate payroll totals.",
 },
 {
         "id": "DQ-C04",
@@ -386,29 +388,29 @@ def run_checks():
                     )
 
                 elif check["id"] == "DQ-C04":
-                    payroll = pd.read_excel(
-                        WORKBOOK, sheet_name="fact_payroll"
-                    )
-                    employees = pd.read_excel(
-                        WORKBOOK, sheet_name="dim_employee"
-                    )
+                    with conn.cursor() as cur:
+                        cur.execute("""
+                            SELECT
+                                p.payroll_item_id,
+                                p.employee_id,
+                                p.employee_key
+                            FROM warehouse.fact_payroll p
+                            LEFT JOIN warehouse.dim_employee d
+                              ON d.employee_id = p.employee_id
+                            WHERE d.employee_id IS NULL
+                        """)
 
-                    missing = payroll[
-                        ~payroll["employee_id"].isin(
-                            employees["employee_id"]
-                        )
-                    ]
+                        missing = cur.fetchall()
+
                     bad_rows = len(missing)
                     status = "PASS" if bad_rows == 0 else "FAIL"
+
                     message = (
-                        "All payroll employees exist in the employee dimension."
+                        "All payroll employees exist in the live employee dimension."
                         if bad_rows == 0
                         else "Orphan payroll IDs: "
-                        + ", ".join(
-                            missing["payroll_item_id"].astype(str)
-                        )
+                        + ", ".join(str(row[0]) for row in missing)
                     )
-
                 elif check["id"] == "DQ-C05":
                     attendance = pd.read_excel(
                         WORKBOOK,
